@@ -1,0 +1,10 @@
+name = "lifeos-r2"
+main = "r2-worker.js"
+compatibility_date = "2026-09-28"
+workers_dev = true
+
+# Do not enable Smart Placement. It returns Cloudflare error 1042 on R2 writes.
+
+[[r2_buckets]]
+binding = "LIFEOS_STORAGE"
+bucket_name = "lifeos-storage"
