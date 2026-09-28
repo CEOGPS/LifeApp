@@ -103,6 +103,7 @@ export const PanelLayout: React.FC<PanelLayoutProps> = ({
       <div
         className={cn(
           "flex-1 flex flex-col transition-all duration-300",
+          topbar ? "pt-14" : false,
           sidebar && !sidebarCollapsed ? "md:ml-64" : "md:ml-16"
         )}
         style={{
@@ -119,6 +120,8 @@ export const PanelLayout: React.FC<PanelLayoutProps> = ({
             {topbar}
           </div>
         )}
+
+        {banner}
 
         <main
           ref={contentRef}
@@ -146,7 +149,6 @@ export const PanelLayout: React.FC<PanelLayoutProps> = ({
               {actions && <div className="flex items-center gap-2">{actions}</div>}
             </div>
           )}
-          {banner}
           <div className="flex-1 w-full">{children}</div>
           {footer && (
             <footer className="mt-auto pt-6 border-t border-white/10">

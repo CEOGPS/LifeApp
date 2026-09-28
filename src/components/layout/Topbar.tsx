@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { storeImage } from "./brandImage";
 import { motion, AnimatePresence } from "motion/react";
 
 const cn = (...classes: Array<string | false | null | undefined>) =>
@@ -68,6 +69,8 @@ export const Topbar: React.FC<TopbarProps> = ({
   onNotificationsClick,
   sidebarCollapsed = false,
 }) => {
+  const [logoSrc, setLogoSrc] = useState<string | null>(() => localStorage.getItem("lifeos_logo"));
+  const logoRef = useRef<HTMLInputElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -162,6 +165,32 @@ export const Topbar: React.FC<TopbarProps> = ({
       role="banner"
     >
       <div className="flex items-center justify-between w-full px-4 h-full gap-4">
+        <button
+          type="button"
+          title="Upload logo"
+          onClick={() => logoRef.current?.click()}
+          className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-primary/40 bg-primary/20"
+        >
+          {logoSrc ? (
+            <img src={logoSrc} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <span className="text-[10px] font-semibold text-primary">L</span>
+          )}
+        </button>
+        <input
+          ref={logoRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            void storeImage(file, 256).then((url) => {
+              localStorage.setItem("lifeos_logo", url);
+              setLogoSrc(url);
+            });
+          }}
+        />
         <div className="flex items-center gap-4 flex-1 min-w-0">
           <button
             onClick={() => setSearchOpen(true)}

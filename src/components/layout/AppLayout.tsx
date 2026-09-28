@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from "react";
-import { Outlet, NavLink, useLocation } from "react-router-dom";
-import { cn } from "@/platform/utils/cn";
+import React, { useState } from "react";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { PanelLayout, Sidebar, Topbar, PlaceholderPanel } from "./index";
-import { SIDEBAR_SECTIONS, SIDEBAR_ITEMS, type SidebarItem } from "./sidebar-items";
+import { SIDEBAR_ITEMS } from "./sidebar-items";
+import { UploadBanner } from "./UploadBanner";
+import { ErebusDock } from "@/components/ErebusDock";
 
 interface AppLayoutProps {
   user?: { name: string; email: string; avatar?: string } | null;
@@ -11,28 +12,24 @@ interface AppLayoutProps {
 
 export const AppLayout: React.FC<AppLayoutProps> = ({ user, onSignOut }) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
 
-  const activeItem = SIDEBAR_ITEMS.find(item => item.href === location.pathname)?.id;
-
-  const handleItemClick = (itemId: string) => {
-    const item = SIDEBAR_ITEMS.find(i => i.id === itemId);
-    if (item?.href) {
-      window.location.href = item.href;
-    }
-    if (item?.onClick) {
-      item.onClick();
-    }
-    setMobileSidebarOpen(false);
-  };
+  const activeItem = SIDEBAR_ITEMS.find((item) => {
+    if (!item.href) return false;
+    return location.pathname === item.href || location.pathname.startsWith(`${item.href}/`);
+  })?.id;
 
   const sidebar = (
     <Sidebar
       collapsed={sidebarCollapsed}
       onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
       activeItem={activeItem}
-      onItemClick={handleItemClick}
+      onItemClick={(itemId) => {
+        const item = SIDEBAR_ITEMS.find((entry) => entry.id === itemId);
+        if (item?.href) navigate(item.href);
+        item?.onClick?.();
+      }}
     />
   );
 
@@ -41,25 +38,30 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ user, onSignOut }) => {
       title={getPageTitle(location.pathname)}
       breadcrumbs={getBreadcrumbs(location.pathname)}
       enableNotifications={true}
-      notificationCount={3}
+      notificationCount={0}
       user={user || undefined}
-      onProfileClick={() => window.location.href = "/preferences"}
+      onProfileClick={() => navigate("/preferences")}
       sidebarCollapsed={sidebarCollapsed}
     />
   );
 
   return (
-    <PanelLayout
-      sidebar={sidebar}
-      sidebarCollapsed={sidebarCollapsed}
-      onSidebarToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-      topbar={topbar}
-      padding="md"
-      maxWidth="none"
-      gridBackground={true}
-    >
-      <Outlet />
-    </PanelLayout>
+    <div className="min-h-screen bg-black text-white">
+      <PanelLayout
+        sidebar={sidebar}
+        sidebarCollapsed={sidebarCollapsed}
+        onSidebarToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+        topbar={topbar}
+        banner={<UploadBanner />}
+        padding="none"
+        maxWidth="none"
+        gridBackground={true}
+        className="bg-black"
+      >
+        <Outlet />
+      </PanelLayout>
+      <ErebusDock />
+    </div>
   );
 };
 
