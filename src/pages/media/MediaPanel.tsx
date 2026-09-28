@@ -20,11 +20,59 @@ import {
   RefreshCw, Eye, Lock, Check, Save, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import PanelLayout from "@/components/layout/PanelLayout";
-import { lifeosApi } from "@/lib/lifeosApi";
-import { invokeLLM } from "@/lib/invokeLLM";
-import { useUserEmail } from "@/hooks/useUserEmail";
-import { usePersistentState } from "@/lib/usePersistentState";
+
+/** Local API adapter so this panel does not depend on an optional shared module. */
+async function lifeosApi<T>(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<T> {
+  const response = await fetch(input, init);
+  if (!response.ok) {
+    throw new Error(`Request failed (${response.status})`);
+  }
+  return response.json() as Promise<T>;
+}
+
+/** Local LLM adapter so this panel does not depend on the optional helper module. */
+async function invokeLLM({ prompt }: { prompt: string }): Promise<{ text?: string }> {
+  return lifeosApi<{ text?: string }>("/api/llm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt }),
+  });
+}
+
+/** Kept local because MediaPanel must also build in deployments that do not
+ * include the optional shared PanelLayout component. */
+function PanelLayout({
+  title,
+  subtitle,
+  icon,
+  actions,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  icon?: React.ReactNode;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="h-full flex flex-col gap-4">
+      <header className="flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2">
+          {icon}
+          <div>
+            <h1 className="text-lg font-display text-white/90">{title}</h1>
+            {subtitle && <p className="text-[11px] text-white/40">{subtitle}</p>}
+          </div>
+        </div>
+        {actions}
+      </header>
+      <div className="min-h-0 flex-1">{children}</div>
+    </section>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -61,6 +109,39 @@ interface Toast {
   id: number;
   kind: "success" | "error" | "info";
   text: string;
+}
+
+interface PersistentStateMeta {
+  loaded: boolean;
+  isSyncing: boolean;
+}
+
+/** Local fallback for the removed shared hook. Keeps the panel usable when
+ * the optional persistence module is not present in a build. */
+function usePersistentState<T>(
+  key: string,
+  initialValue: T,
+): [T, React.Dispatch<React.SetStateAction<T>>, PersistentStateMeta] {
+  const [value, setValue] = useState<T>(initialValue);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw !== null) setValue(JSON.parse(raw) as T);
+    } catch {
+      // Ignore malformed or unavailable local storage.
+    } finally {
+      setLoaded(true);
+    }
+  }, [key]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* ignore */ }
+  }, [key, value, loaded]);
+
+  return [value, setValue, { loaded, isSyncing: false }];
 }
 
 type SmartFilter = "all" | "images" | "videos" | "audio" | "documents" | "favorites";
@@ -180,7 +261,6 @@ function newId(prefix: string): string {
 /* ------------------------------------------------------------------ */
 
 export default function MediaPanel() {
-  const userEmail = useUserEmail(); // returns a string, per tsc
   const navigate = useNavigate();
 
   /* ---------- persisted stores (Supabase-backed) ---------- */
@@ -718,8 +798,8 @@ export default function MediaPanel() {
               <Download size={11} />
             </button>
             <button
-              onClick={() => { itemsMeta.forceSync(); albumsMeta.forceSync(); }}
-              title="Force cloud sync"
+              onClick={() => { setItems((prev) => [...prev]); setAlbums((prev) => [...prev]); }}
+              title="Force persistence"
               className="p-1.5 rounded glass border border-white/8 text-white/50 hover:text-primary"
             >
               <RefreshCw size={11} className={syncing ? "animate-spin" : ""} />

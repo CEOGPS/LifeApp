@@ -1,6 +1,30 @@
-import { ReactNode } from 'react';
-import { LucideIcon } from 'lucide-react';
-import PanelLayout from '@/components/layout/PanelLayout';
+import type { ReactNode } from 'react';
+
+type PanelLayoutProps = {
+  title: string;
+  subtitle?: string;
+  icon?: ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
+};
+
+function PanelLayout({ title, subtitle, icon, actions, children }: PanelLayoutProps) {
+  return (
+    <section className="h-full flex flex-col gap-4 p-4">
+      <header className="flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
+          {icon}
+          <div>
+            <h1 className="font-display text-lg text-white">{title}</h1>
+            {subtitle && <p className="text-xs text-white/40">{subtitle}</p>}
+          </div>
+        </div>
+        {actions}
+      </header>
+      <div className="flex-1 min-h-0">{children}</div>
+    </section>
+  );
+}
 
 /**
  * Example Panel Component Template
@@ -73,7 +97,7 @@ export default function TemplatePanel(props: TemplatePanelProps) {
  *
  * ─── COLOR CLASSES ───
  * text-primary        → oklch(0.55 0.22 20) — crimson, use for accent text
- * text-teal           → oklch(0.75 0.15 175) — labels, secondary info
+ * text-teal           → hsl(var(--teal)) — labels, secondary info
  * text-blue-info      → oklch(0.7 0.15 240) — informational text
  * text-white/60       → white at 60% opacity
  * bg-white/5          → white background at 5% opacity (glass bg)

@@ -1,7 +1,7 @@
 // ─── Initiation Engine ─────────────────────────────────────────────────────
 // Handles Erebus's unprompted speech — heartbeat, triggers, scoring, delivery
 
-import {
+import type {
   InitiationState,
   InitiationMessage,
   InitiationLogEntry,
@@ -13,10 +13,8 @@ import {
   PresenceState,
   EmotionalState,
   InitiationTone,
-  DEFAULT_PERSONALITY,
-  DEFAULT_TRIGGERS,
-  DEFAULT_COOLDOWN,
 } from "../types/initiation.types";
+import { DEFAULT_PERSONALITY, DEFAULT_TRIGGERS, DEFAULT_COOLDOWN } from "../types/initiation.types";
 
 const STORAGE_KEY = "erebus_initiation_state";
 

@@ -1,16 +1,16 @@
-import React from "react";
 import { Link } from "react-router-dom";
 import { Home, Search, AlertTriangle } from "lucide-react";
-import PanelLayout from "@/components/layout/PanelLayout";
 
 export default function NotFound() {
   return (
-    <PanelLayout
-      title="Page Not Found"
-      subtitle="The page you're looking for doesn't exist"
-      icon={<AlertTriangle size={18} />}
-      className="max-w-md mx-auto"
-    >
+    <div className="max-w-md mx-auto">
+      <div className="mb-6 flex items-center gap-2">
+        <AlertTriangle size={18} />
+        <div>
+          <h2 className="text-lg font-semibold">Page Not Found</h2>
+          <p className="text-sm text-white/60">The page you're looking for doesn't exist</p>
+        </div>
+      </div>
       <div className="text-center py-12">
         <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-white/20" />
         <h1 className="text-2xl font-bold mb-2">404</h1>
@@ -33,6 +33,6 @@ export default function NotFound() {
           </Link>
         </div>
       </div>
-    </PanelLayout>
+    </div>
   );
 }

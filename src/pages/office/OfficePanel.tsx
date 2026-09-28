@@ -8,17 +8,119 @@
 import {
   useCallback, useEffect, useMemo, useRef, useState,
 } from "react";
+import type { ReactNode } from "react";
 import {
   FileSpreadsheet, Plus, FileText, Table2, Presentation, Folder,
   Search, Download, Upload, FolderOpen, Trash2, X, Check,
   Loader2, CheckCircle, XCircle, Info, Sparkles, TrendingUp,
   TrendingDown, ExternalLink, DollarSign, Heart, Globe, Save,
 } from "lucide-react";
-import PanelLayout from "@/components/layout/PanelLayout";
-import { supabase } from "@/lib/supabaseClient";
-import { api, ApiError } from "@/lib/api";
-import { invokeLLM } from "@/lib/invokeLLM";
-import { useAuth } from "@/lib/SupabaseAuthContext";
+import { createClient } from "@supabase/supabase-js";
+import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
+
+const env = (import.meta as ImportMeta & {
+  env?: Record<string, string | undefined>;
+}).env;
+const supabaseUrl = env?.VITE_SUPABASE_URL;
+const supabaseAnonKey = env?.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY");
+}
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+const api = {
+  async post<T>(path: string, body: unknown): Promise<T> {
+    const response = await fetch(path, {
+      method: "POST",
+      headers: body instanceof FormData ? undefined : { "Content-Type": "application/json" },
+      body: body instanceof FormData ? body : JSON.stringify(body),
+    });
+    const payload: unknown = await response.json().catch(() => null);
+    if (!response.ok) {
+      const message =
+        typeof payload === "object" && payload !== null && "error" in payload && typeof payload.error === "string"
+          ? payload.error
+          : `Request failed (${response.status})`;
+      throw new ApiError(message, response.status);
+    }
+    return payload as T;
+  },
+};
+
+type LlmRequest = {
+  prompt: string;
+  systemPrompt?: string;
+};
+
+type LlmResponse = {
+  text?: string;
+};
+
+async function invokeLLM(request: LlmRequest): Promise<LlmResponse> {
+  return api.post<LlmResponse>("/api/llm", request);
+}
+
+function useOfficeUser(): { user: User | null } {
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    void supabase.auth.getUser().then(({ data }: { data: { user: User | null } }) => {
+      if (mounted) setUser(data.user);
+    });
+
+    const { data } = supabase.auth.onAuthStateChange(
+      (_event: AuthChangeEvent, session: Session | null) => {
+      if (mounted) setUser(session?.user ?? null);
+      },
+    );
+
+    return () => {
+      mounted = false;
+      data.subscription.unsubscribe();
+    };
+  }, []);
+
+  return { user };
+}
+
+function PanelLayout({
+  title,
+  subtitle,
+  icon,
+  actions,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  icon?: ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <main className="h-full min-h-0 flex flex-col p-4 md:p-6">
+      <header className="flex items-center gap-3 mb-4 shrink-0">
+        {icon && <div className="text-primary">{icon}</div>}
+        <div className="min-w-0 flex-1">
+          <h1 className="text-lg font-display text-white-90">{title}</h1>
+          {subtitle && <p className="text-[11px] text-white-40 mt-0.5">{subtitle}</p>}
+        </div>
+        {actions}
+      </header>
+      <div className="flex-1 min-h-0 flex flex-col">{children}</div>
+    </main>
+  );
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    TYPES
@@ -437,8 +539,8 @@ function FileEditor({
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function OfficePanel() {
-  const { user } = useAuth();
-  const userId = user?.uid ?? null;
+  const { user } = useOfficeUser();
+  const userId = user?.id ?? null;
 
   const [topTab, setTopTab] = useState<TopTab>("Files");
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -468,13 +570,13 @@ export default function OfficePanel() {
   const importRef = useRef<HTMLInputElement>(null);
 
   const loadFiles = useCallback(async () => {
-    if (!userId) { setFiles([]); setFilesLoading(false); return; }
+    if (!user?.id) { setFiles([]); setFilesLoading(false); return; }
     setFilesLoading(true);
     try {
       const { data, error: qErr } = await supabase
         .from("office_files")
         .select("*")
-        .eq("user_id", userId)
+        .eq("user_id", user.id)
         .order("updated_at", { ascending: false })
         .limit(500);
       if (qErr) throw new Error(qErr.message);
@@ -484,7 +586,7 @@ export default function OfficePanel() {
     } finally {
       setFilesLoading(false);
     }
-  }, [userId]);
+  }, [user]);
 
   useEffect(() => { loadFiles(); }, [loadFiles]);
 
@@ -503,12 +605,12 @@ export default function OfficePanel() {
 
   const createFile = useCallback(
     async (type: FileType, name: string, body: string) => {
-      if (!userId) return;
+      if (!user?.id) return;
       try {
         const { data, error: iErr } = await supabase
           .from("office_files")
           .insert([{
-            user_id: userId,
+            user_id: user.id,
             name: name.trim() || `Untitled ${type}`,
             type,
             body,
@@ -529,21 +631,21 @@ export default function OfficePanel() {
         addToast("error", e instanceof Error ? e.message : "Create failed");
       }
     },
-    [userId, addToast],
+    [user, addToast],
   );
 
   const updateFile = useCallback(
     async (id: string, patch: Partial<OfficeFileRow>) => {
-      if (!userId) return;
+      if (!user?.id) return;
       try {
         const body = patch.body;
         const next: Record<string, unknown> = { ...patch, updated_at: new Date().toISOString() };
-        if (body !== undefined) next.size = new Blob([body]).size;
+        if (body !== undefined && body !== null) next.size = new Blob([body]).size;
         const { data, error: uErr } = await supabase
           .from("office_files")
           .update(next)
           .eq("id", id)
-          .eq("user_id", userId)
+          .eq("user_id", user.id)
           .select()
           .single();
         if (uErr) throw new Error(uErr.message);
@@ -553,19 +655,19 @@ export default function OfficePanel() {
         addToast("error", e instanceof Error ? e.message : "Save failed");
       }
     },
-    [userId, addToast],
+    [user, addToast],
   );
 
   const deleteFile = useCallback(
     async (id: string) => {
-      if (!userId) return;
+      if (!user?.id) return;
       if (!window.confirm("Delete this file?")) return;
       try {
         const { error: dErr } = await supabase
           .from("office_files")
           .delete()
           .eq("id", id)
-          .eq("user_id", userId);
+          .eq("user_id", user.id);
         if (dErr) throw new Error(dErr.message);
         setFiles((prev) => prev.filter((f) => f.id !== id));
         if (editingFileId === id) setEditingFileId(null);
@@ -574,7 +676,7 @@ export default function OfficePanel() {
         addToast("error", e instanceof Error ? e.message : "Delete failed");
       }
     },
-    [userId, editingFileId, addToast],
+    [user, editingFileId, addToast],
   );
 
   const handleImport = useCallback(
@@ -653,12 +755,12 @@ export default function OfficePanel() {
   const [aiError, setAiError] = useState<string | null>(null);
 
   const loadKpis = useCallback(async () => {
-    if (!userId) { setKpiValues([]); setKpiHistory([]); setKpiLoading(false); return; }
+    if (!user?.id) { setKpiValues([]); setKpiHistory([]); setKpiLoading(false); return; }
     setKpiLoading(true);
     try {
       const [vals, hist] = await Promise.all([
-        supabase.from("office_kpi_values").select("*").eq("user_id", userId).limit(1000),
-        supabase.from("office_kpi_history").select("*").eq("user_id", userId).order("at", { ascending: false }).limit(5000),
+        supabase.from("office_kpi_values").select("*").eq("user_id", user.id).limit(1000),
+        supabase.from("office_kpi_history").select("*").eq("user_id", user.id).order("at", { ascending: false }).limit(5000),
       ]);
       if (vals.error) throw new Error(vals.error.message);
       if (hist.error) throw new Error(hist.error.message);
@@ -669,7 +771,7 @@ export default function OfficePanel() {
     } finally {
       setKpiLoading(false);
     }
-  }, [userId]);
+  }, [user]);
 
   useEffect(() => { loadKpis(); }, [loadKpis]);
 
@@ -692,14 +794,14 @@ export default function OfficePanel() {
 
   const updateKpi = useCallback(
     async (kpiId: string, newValue: number) => {
-      if (!userId) return;
+      if (!user?.id) return;
       const def = KPI_DEFS[activeModule].find((d) => d.id === kpiId);
       if (!def) return;
       const existing = kpiValues.find((v) => v.module === activeModule && v.kpi_id === kpiId);
       const oldVal = existing?.value ?? 0;
       const trend = oldVal !== 0 ? Math.round(((newValue - oldVal) / oldVal) * 100) : 0;
       const payload = {
-        user_id: userId,
+        user_id: user.id,
         module: activeModule,
         kpi_id: kpiId,
         name: def.name,
@@ -725,7 +827,7 @@ export default function OfficePanel() {
           });
         }
         const histRow = {
-          user_id: userId,
+          user_id: user.id,
           module: activeModule,
           kpi_id: kpiId,
           value: newValue,
@@ -741,7 +843,7 @@ export default function OfficePanel() {
         addToast("error", e instanceof Error ? e.message : "KPI update failed");
       }
     },
-    [userId, activeModule, kpiValues, addToast],
+    [user, activeModule, kpiValues, addToast],
   );
 
   const runKpiAi = useCallback(async () => {
@@ -753,15 +855,14 @@ export default function OfficePanel() {
       return `${k.name}: ${k.value} ${k.unit} (target ${k.target}, ${s})`;
     }).join("\n");
     const moduleName = KPI_MODULES.find((m) => m.id === activeModule)?.name ?? activeModule;
-    const res = await invokeLLM({
+const res = await invokeLLM({
       prompt:
         `Analyze these ${moduleName} KPIs and give 3-5 specific, actionable recommendations. ` +
         `Focus on the ones that are off-track or at-risk. Give concrete next steps, not generic advice.\n\n${lines}`,
       systemPrompt: "You are a business and life analytics advisor. Be concrete and concise.",
-      maxTokens: 800,
     });
-    if (!res.ok) {
-      setAiError(`AI failed (${res.reason}): ${res.detail}`);
+    if (!res.text) {
+      setAiError(`AI failed to return a response`);
     } else {
       setAiRecs(res.text);
     }
@@ -793,13 +894,13 @@ export default function OfficePanel() {
   });
 
   const loadSheets = useCallback(async () => {
-    if (!userId) { setSheets([]); setSheetsLoading(false); return; }
+    if (!user?.id) { setSheets([]); setSheetsLoading(false); return; }
     setSheetsLoading(true);
     try {
       const { data, error: qErr } = await supabase
         .from("office_web_sheets")
         .select("*")
-        .eq("user_id", userId)
+        .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(500);
       if (qErr) throw new Error(qErr.message);
@@ -809,12 +910,12 @@ export default function OfficePanel() {
     } finally {
       setSheetsLoading(false);
     }
-  }, [userId]);
+  }, [user]);
 
   useEffect(() => { loadSheets(); }, [loadSheets]);
 
   const addSheet = useCallback(async () => {
-    if (!userId || !sheetForm.name.trim()) {
+    if (!user?.id || !sheetForm.name.trim()) {
       addToast("error", "Sheet name is required");
       return;
     }
@@ -822,7 +923,7 @@ export default function OfficePanel() {
       const { data, error: iErr } = await supabase
         .from("office_web_sheets")
         .insert([{
-          user_id: userId,
+          user_id: user.id,
           name: sheetForm.name.trim(),
           module: sheetForm.module,
           google_sheets_id: sheetForm.googleSheetsId.trim() || null,
@@ -837,17 +938,17 @@ export default function OfficePanel() {
     } catch (e) {
       addToast("error", e instanceof Error ? e.message : "Save failed");
     }
-  }, [userId, sheetForm, activeModule, addToast]);
+  }, [user, sheetForm, activeModule, addToast]);
 
   const deleteSheet = useCallback(
     async (id: string) => {
-      if (!userId) return;
+      if (!user?.id) return;
       try {
         const { error: dErr } = await supabase
           .from("office_web_sheets")
           .delete()
           .eq("id", id)
-          .eq("user_id", userId);
+          .eq("user_id", user.id);
         if (dErr) throw new Error(dErr.message);
         setSheets((prev) => prev.filter((s) => s.id !== id));
         addToast("info", "Sheet removed");
@@ -855,7 +956,7 @@ export default function OfficePanel() {
         addToast("error", e instanceof Error ? e.message : "Delete failed");
       }
     },
-    [userId, addToast],
+    [user, addToast],
   );
 
   const openSheet = useCallback(

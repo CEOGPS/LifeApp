@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Check, Trash2, Circle } from "lucide-react";
-import { usePersistentState } from "@/lib/usePersistentState.ts";
+import { usePersistentState } from "@/lib/usePersistentState";
 
 type Task = {
   id: string;
@@ -20,18 +20,19 @@ export default function TasksModule() {
   const [input, setInput] = useState("");
   const [priority, setPriority] = useState<Task["priority"]>("mid");
 
-  const add = () => {
+  const add = async () => {
     if (!input.trim()) return;
-    setTasks((t) => [
+    await setTasks((t) => [
       ...t,
       { id: Date.now().toString(), text: input.trim(), done: false, priority },
     ]);
     setInput("");
   };
 
-  const toggle = (id: string) =>
-    setTasks((t) => t.map((x) => (x.id === id ? { ...x, done: !x.done } : x)));
-  const del = (id: string) => setTasks((t) => t.filter((x) => x.id !== id));
+  const toggle = async (id: string) =>
+    await setTasks((t) => t.map((x) => (x.id === id ? { ...x, done: !x.done } : x)));
+  const del = async (id: string) =>
+    await setTasks((t) => t.filter((x) => x.id !== id));
 
   return (
     <div className="flex flex-col gap-3 h-full">

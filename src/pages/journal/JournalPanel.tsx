@@ -6,15 +6,87 @@
 
 import {
   useCallback, useEffect, useMemo, useRef, useState,
+  type ReactNode,
 } from "react";
 import {
   BookOpen, Plus, Search, Trash2, Pencil, X, Check, Loader2,
   Save, Sparkles, Calendar, Tag, ChevronLeft, AlertCircle, Download,
 } from "lucide-react";
-import PanelLayout from "@/components/layout/PanelLayout";
-import { supabase } from "@/lib/supabaseClient";
-import { invokeLLM } from "@/lib/invokeLLM";
-import { useAuth } from "@/lib/SupabaseAuthContext";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
+import { supabase } from "../../lib/supabaseClient";
+
+function useAuth() {
+  const [user, setUser] = useState<Awaited<ReturnType<typeof supabase.auth.getUser>>["data"]["user"]>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    void supabase.auth.getUser().then((result: Awaited<ReturnType<typeof supabase.auth.getUser>>) => {
+      const { data } = result;
+      if (mounted) setUser(data.user);
+    });
+
+    const { data: subscription } = supabase.auth.onAuthStateChange(
+      (_event: AuthChangeEvent, session: Session | null) => {
+      if (mounted) setUser(session?.user ?? null);
+      },
+    );
+
+    return () => {
+      mounted = false;
+      subscription.subscription.unsubscribe();
+    };
+  }, []);
+
+  return { user };
+}
+
+type LLMRequest = {
+  prompt: string;
+  systemPrompt?: string;
+};
+
+type LLMResponse = {
+  text?: string;
+};
+
+async function invokeLLM(request: LLMRequest): Promise<LLMResponse> {
+  const response = await fetch("/api/llm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) return {};
+  const data = (await response.json()) as LLMResponse;
+  return { text: typeof data.text === "string" ? data.text : undefined };
+}
+
+interface PanelLayoutProps {
+  title: string;
+  subtitle?: string;
+  icon?: ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
+}
+
+function PanelLayout({
+  title, subtitle, icon, actions, children,
+}: PanelLayoutProps) {
+  return (
+    <section className="h-full flex flex-col min-h-0">
+      <header className="flex items-center gap-3 px-1 pb-3">
+        {icon && <span className="text-primary">{icon}</span>}
+        <div className="flex-1 min-w-0">
+          <h1 className="text-lg text-white-90">{title}</h1>
+          {subtitle && <p className="text-[11px] text-white-40">{subtitle}</p>}
+        </div>
+        {actions}
+      </header>
+      <div className="flex-1 min-h-0">{children}</div>
+    </section>
+  );
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    TYPES
@@ -142,7 +214,7 @@ function downloadCsv(filename: string, rows: (string | number)[][]): void {
 
 export default function JournalPanel() {
   const { user } = useAuth();
-  const userId = user?.uid ?? null;
+  const userId = user?.id ?? null;
 
   const [pages, setPages] = useState<JournalPage[]>([]);
   const [loading, setLoading] = useState(true);

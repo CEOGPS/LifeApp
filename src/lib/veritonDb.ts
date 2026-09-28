@@ -1,7 +1,7 @@
 // src/lib/veritonDb.ts
 // Veriton music database operations
 
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "./supabaseClient";
 
 export interface Track {
   id: string;

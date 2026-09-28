@@ -5,12 +5,12 @@
 // AI lyric polish. Supabase for durable rows, Worker for uploads.
 
 import {
-  ChangeEvent,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type ReactNode,
 } from "react";
 import {
@@ -19,8 +19,66 @@ import {
   Search, Loader2, Sparkles, Upload, ListMusic, MoreHorizontal,
   ExternalLink, X,
 } from "lucide-react";
-import { lifeosApi } from "@/lib/lifeosApi";
-import PanelLayout from "@/components/layout/PanelLayout";
+/** Small local API client kept in this page so the panel does not depend on a
+ * missing shared module. JSON requests get the appropriate content type while
+ * FormData uploads are passed through untouched so the browser can set the
+ * multipart boundary. */
+async function lifeosApi<T = unknown>(
+  input: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const headers = new Headers(init.headers);
+  const isFormData = init.body instanceof FormData;
+  if (!isFormData && init.body !== undefined && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const response = await fetch(input, { ...init, headers });
+  const contentType = response.headers.get("content-type") ?? "";
+  const payload = contentType.includes("application/json")
+    ? await response.json()
+    : await response.text();
+
+  if (!response.ok) {
+    const message =
+      typeof payload === "object" && payload !== null && "message" in payload
+        ? String((payload as { message: unknown }).message)
+        : typeof payload === "string" && payload
+          ? payload
+          : `Request failed (${response.status})`;
+    throw new Error(message);
+  }
+
+  return payload as T;
+}
+
+function PanelLayout({
+  title,
+  subtitle,
+  icon,
+  actions,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  icon?: ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="h-full flex flex-col min-h-0">
+      <header className="shrink-0 flex items-center gap-3 pb-3">
+        {icon && <div className="text-primary">{icon}</div>}
+        <div className="min-w-0">
+          <h1 className="text-sm font-display tracking-wider text-white-85">{title}</h1>
+          {subtitle && <p className="text-[10px] text-white-30">{subtitle}</p>}
+        </div>
+        {actions && <div className="ml-auto">{actions}</div>}
+      </header>
+      <div className="flex-1 min-h-0">{children}</div>
+    </section>
+  );
+}
 type EntityName = "Track" | "Playlist";
 
 const db = {
@@ -42,13 +100,13 @@ function createEntity<T extends EntityName>(name: T) {
       );
       return Array.isArray(result) ? result : result.data ?? [];
     },
-    create<R>(body: unknown): Promise<R> {
-      return lifeosApi<R>(base, { method: "POST", body });
+    create<R>(body: Record<string, unknown>): Promise<R> {
+      return lifeosApi<R>(base, { method: "POST", body: JSON.stringify(body) });
     },
-    update<R>(id: string, body: unknown): Promise<R> {
+    update<R>(id: string, body: Record<string, unknown>): Promise<R> {
       return lifeosApi<R>(`${base}/${encodeURIComponent(id)}`, {
         method: "PATCH",
-        body,
+        body: JSON.stringify(body),
       });
     },
     delete(id: string): Promise<void> {
@@ -83,13 +141,13 @@ interface GeneratedSong {
 }
 
 const generateSong = (input: Record<string, unknown>) =>
-  lifeosApi<{ id: string }>("/api/music/generate", { method: "POST", body: input });
+  lifeosApi<{ id: string }>("/api/music/generate", { method: "POST", body: JSON.stringify(input) });
 const pollSongStatus = (id: string) =>
   lifeosApi<GeneratedSong>(`/api/music/status/${encodeURIComponent(id)}`);
 const polishLyrics = (lyrics: string, genre: string, bpm: number) =>
   lifeosApi<{ ok: boolean; text: string; detail?: string }>("/api/music/polish", {
     method: "POST",
-    body: { lyrics, genre, bpm },
+    body: JSON.stringify({ lyrics, genre, bpm }),
   });
 
 interface PlayerTrack {
@@ -123,47 +181,13 @@ function useMusic() {
   }, [tracks, playTrack]);
 
   return { setTracks, currentTrack, playing, playTrack, togglePlay, addToQueue, applyPlaylist };
-}
+  }
 
-interface PanelLayoutProps {
-  title: string;
-  subtitle?: string;
-  icon?: ReactNode;
-  actions?: ReactNode;
-  children: ReactNode;
-}
+  /* ═══════════════════════════════════════════════════════════════════════════
+     Types + helpers
+     ═══════════════════════════════════════════════════════════════════════════ */
 
-function PanelLayout({
-  title,
-  subtitle,
-  icon,
-  actions,
-  children,
-}: PanelLayoutProps) {
-  return (
-    <section className="h-full flex flex-col min-h-0 p-4 gap-4">
-      <header className="flex items-center justify-between gap-3 shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          {icon}
-          <div className="min-w-0">
-            <h1 className="text-lg font-display text-white truncate">{title}</h1>
-            {subtitle && (
-              <p className="text-[11px] text-white-40 truncate">{subtitle}</p>
-            )}
-          </div>
-        </div>
-        {actions}
-      </header>
-      <div className="flex-1 min-h-0">{children}</div>
-    </section>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   Types + helpers
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-type Tab = "create" | "library" | "playlists";
+  type Tab = "create" | "library" | "playlists";
 
 interface DBTrack {
   id: string;

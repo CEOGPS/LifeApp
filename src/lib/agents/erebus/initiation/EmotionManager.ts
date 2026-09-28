@@ -1,6 +1,6 @@
 // ─── Emotion Manager ─────────────────────────────────────────────────────
 
-import { EmotionalState, InitiationTone } from "../types/initiation.types";
+import type { EmotionalState, InitiationTone } from "../types/initiation.types";
 
 export class EmotionManager {
   private currentEmotion: EmotionalState = "warm";

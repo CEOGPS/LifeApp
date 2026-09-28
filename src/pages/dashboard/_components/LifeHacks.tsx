@@ -13,7 +13,7 @@ export default function LifeHacks() {
   const generate = async () => {
     setLoading(true);
     try {
-      const { text } = await lifeosApi.post("/api/llm/invoke", {
+      const { text } = await lifeosApi.post<{ text: string }>("/api/llm/invoke", {
         prompt:
           "Give 3 short, practical daily life hacks (each under 18 words) useful for a busy business owner balancing family, running a plumbing/electrical company, and a marketing agency. Return ONLY a JSON array of 3 strings, no markdown.",
         max_tokens: 300,

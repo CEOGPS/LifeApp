@@ -1,7 +1,7 @@
 // src/lib/AudioProvider.tsx
 // Audio context provider for persistent audio across navigation
 
-import React, { createContext, useContext, useRef, useEffect, ReactNode } from "react";
+import React, { createContext, useContext, useRef, useEffect, type ReactNode } from "react";
 
 interface AudioContextType {
   audioRef: React.RefObject<HTMLAudioElement | null>;

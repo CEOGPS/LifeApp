@@ -1,21 +1,18 @@
 import { useState } from "react";
 import { Sparkles, RefreshCw, Loader2 } from "lucide-react";
-import { lifeosApi } from "@/lib/api.ts";
-import { usePersistentState } from "@/lib/usePersistentState.ts";
-import { getItem } from "@/lib/storage.ts";
+import { lifeosApi } from "../../../lib/api.ts";
+import { loadAgents } from "../../../lib/storage.ts";
 
 export default function AiMoneyTips() {
-  const [tips, setTips] = usePersistentState<string[]>(
-    "dashboard_money_tips",
-    [],
-  );
+  const [tips, setTips] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
   const refresh = async () => {
     setLoading(true);
     try {
-      const bills = (await getItem<unknown[]>("budget_bills")) || [];
-      const { text } = await lifeosApi.post("/api/llm/invoke", {
+      const agents = await loadAgents();
+      const bills = agents || [];
+      const { text } = await lifeosApi.post<{ text: string }>("/api/llm/invoke", {
         prompt: `Give 3 short, actionable money tips (each under 20 words) for a business owner. ${
           bills.length
             ? `They currently track ${bills.length} recurring bills.`

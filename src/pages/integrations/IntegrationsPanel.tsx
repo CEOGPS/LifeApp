@@ -8,10 +8,9 @@ import {
   CheckCircle2,
   Loader2,
 } from "lucide-react";
-import PanelLayout from "@/components/layout/PanelLayout.tsx";
-import { usePersistentState } from "@/lib/usePersistentState.ts";
-import { loadCredentials, saveCredential, deleteCredential } from "@/lib/integrationsSupabase.ts";
-import { useAuth } from "@/lib/SupabaseAuthContext.tsx";
+import { PanelLayout } from "../../components/layout/PanelLayout";
+import { lifeosApi } from "../../lib/api";
+import { loadCredentials, saveCredential, deleteCredential } from "../../platform/integrations/integrationsSupabase";
 
 type Category =
   | "All"
@@ -209,7 +208,7 @@ const CATEGORIES: Category[] = [
   "Dev Tools", "Business", "AI Media", "Productivity", "Browsers", "More",
 ];
 
-const TEAL_LABEL = "oklch(0.75 0.15 175)";
+const TEAL_LABEL = "hsl(var(--teal))";
 
 // ── Credential model ────────────────────────────────────────────────────────
 type Credential = {
@@ -289,9 +288,12 @@ const OAUTH_SLUG: Record<string, string> = {
   "iCloud Calendar": "apple",
 };
 
+const workerEnv = (import.meta as ImportMeta & {
+  env?: { VITE_WORKER_URL?: string };
+}).env;
 const WORKER_BASE =
-  import.meta.env.VITE_WORKER_URL || "https://lifeos1-api.ceogps.workers.dev";
-const WORKER_CONFIGURED = Boolean(import.meta.env.VITE_WORKER_URL);
+  workerEnv?.VITE_WORKER_URL || "https://lifeos1-api.ceogps.workers.dev";
+const WORKER_CONFIGURED = Boolean(workerEnv?.VITE_WORKER_URL);
 
 const SYNC_ROUTES: Record<string, { url: string; summarize: (d: unknown) => string }> = {
   "Gmail (OAuth)": { url: "/api/email/accounts", summarize: emailSummary },
@@ -331,8 +333,60 @@ function generateState(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
+function usePersistentState<T>(key: string, initialValue: T) {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const stored = window.localStorage.getItem(key);
+      return stored === null ? initialValue : (JSON.parse(stored) as T);
+    } catch {
+      return initialValue;
+    }
+  });
+
+  const setPersistentValue = useCallback(
+    (next: T | ((previous: T) => T)) => {
+      setValue((previous) => {
+        const resolved =
+          typeof next === "function"
+            ? (next as (previous: T) => T)(previous)
+            : next;
+        try {
+          window.localStorage.setItem(key, JSON.stringify(resolved));
+        } catch {
+          // Storage may be unavailable or full; retain the in-memory value.
+        }
+        return resolved;
+      });
+    },
+    [key]
+  );
+
+  return [value, setPersistentValue] as const;
+}
+
+function useIntegrationAuth() {
+  const readAuth = useCallback(() => {
+    try {
+      const raw = window.localStorage.getItem("auth_user");
+      const user = raw ? (JSON.parse(raw) as { email?: string }) : undefined;
+      return { user, isAuthenticated: Boolean(user?.email) };
+    } catch {
+      return { user: undefined, isAuthenticated: false };
+    }
+  }, []);
+  const [auth, setAuth] = useState(readAuth);
+
+  useEffect(() => {
+    const refresh = () => setAuth(readAuth());
+    window.addEventListener("storage", refresh);
+    return () => window.removeEventListener("storage", refresh);
+  }, [readAuth]);
+
+  return auth;
+}
+
 export default function IntegrationsPage() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useIntegrationAuth();
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<Category>("All");
   const [data, setData] = usePersistentState<Record<string, Credential[]>>(
@@ -351,10 +405,11 @@ export default function IntegrationsPage() {
       setLoadingCreds(false);
       return;
     }
+    const email = user.email;
     const load = async () => {
       setLoadingCreds(true);
       try {
-        const credsMap = await loadCredentials(user.email);
+        const credsMap = await loadCredentials(email);
         const converted: Record<string, Credential[]> = {};
         for (const [integrationName, accounts] of Object.entries(credsMap)) {
           converted[integrationName] = Object.values(accounts).map((acc: any) => ({
@@ -406,7 +461,7 @@ export default function IntegrationsPage() {
         pending.map(async ({ name, cred }) => {
           try {
             const res = await fetch(
-              `${WORKER_BASE}/api/oauth/status?provider=${encodeURIComponent(cred.provider!)}&user_id=${encodeURIComponent(user.email)}&account_email=${encodeURIComponent(cred.label)}&state=${encodeURIComponent(cred.oauthState || "")}`
+              `${WORKER_BASE}/api/oauth/status?provider=${encodeURIComponent(cred.provider!)}&user_id=${encodeURIComponent(user.email || "")}&account_email=${encodeURIComponent(cred.label || "")}&state=${encodeURIComponent(cred.oauthState || "")}`
             );
             const j = await res.json().catch(() => null);
             const ok = !!(j && (j.connected || j.ok || j.access_token || j.status === "connected"));
@@ -574,28 +629,29 @@ export default function IntegrationsPage() {
   };
 
   // Manual status check
-  const checkOAuth = async (name: string, cred: Credential) => {
-    if (!cred.provider || !user?.email) return;
-    try {
-      const res = await lifeosApi(`/api/oauth/status?provider=${encodeURIComponent(
-        cred.provider
-      )}&user_id=${encodeURIComponent(user.email)}&account_email=${encodeURIComponent(
-        cred.label
-      )}&state=${encodeURIComponent(cred.oauthState || "")}`, { method: "GET" });
-      const ok = !!(res && (res.connected || res.ok || res.access_token || res.status === "connected"));
-      updateCreds(name, (c) =>
-        c.map((x) =>
-          x.id === cred.id
-            ? {
-                ...x,
-                status: ok ? "connected" : "pending",
-                lastSync: ok ? "OAuth connected" : x.lastSync,
-                lastSyncedAt: ok ? Date.now() : x.lastSyncedAt,
-                syncError: ok ? undefined : (res && (res.message || res.error)) || "Not connected yet",
-              }
-            : x
-        )
-      );
+    const checkOAuth = async (name: string, cred: Credential) => {
+      if (!cred.provider || !user?.email) return;
+      try {
+        const res = await lifeosApi(`/api/oauth/status?provider=${encodeURIComponent(
+          cred.provider
+        )}&user_id=${encodeURIComponent(user.email)}&account_email=${encodeURIComponent(
+          cred.label
+        )}&state=${encodeURIComponent(cred.oauthState || "")}`, { method: "GET" });
+        const resData = res as Record<string, unknown>;
+        const ok = !!(resData && (resData.connected || resData.ok || resData.access_token || resData.status === "connected"));
+        updateCreds(name, (c) =>
+          c.map((x) =>
+            x.id === cred.id
+              ? {
+                  ...x,
+                  status: ok ? "connected" : "pending",
+                  lastSync: ok ? "OAuth connected" : x.lastSync,
+                  lastSyncedAt: ok ? Date.now() : x.lastSyncedAt,
+                  syncError: ok ? undefined : (resData && ((resData.message as string) || (resData.error as string))) || "Not connected yet",
+                }
+              : x
+          )
+        );
     } catch {
       updateCreds(name, (c) =>
         c.map((x) =>
@@ -617,22 +673,23 @@ export default function IntegrationsPage() {
       return;
     }
     setSyncingId(cred.id);
-    try {
-      const res = await lifeosApi(route.url, {
-        headers: { "X-User-Id": user?.email || "" },
-      });
-      updateCreds(name, (c) =>
-        c.map((x) =>
-          x.id === cred.id
-            ? {
-                ...x,
-                lastSync: route.summarize(res),
-                lastSyncedAt: Date.now(),
-                syncError: undefined,
-              }
-            : x
-        )
-      );
+        try {
+          const res = await lifeosApi(route.url, {
+            headers: { "X-User-Id": user?.email || "" },
+          });
+          const resData = res as Record<string, unknown>;
+          updateCreds(name, (c) =>
+            c.map((x) =>
+              x.id === cred.id
+                ? {
+                    ...x,
+                    lastSync: route.summarize(resData),
+                    lastSyncedAt: Date.now(),
+                    syncError: undefined,
+                  }
+                : x
+            )
+          );
     } catch (e) {
       updateCreds(name, (c) =>
         c.map((x) =>
@@ -660,11 +717,7 @@ export default function IntegrationsPage() {
   };
 
   return (
-    <PanelLayout
-      title="Integrations"
-      subtitle={`${INTEGRATIONS.length} integrations available · ${totalConnected} connected`}
-      icon={<Plug size={16} />}
-    >
+    <PanelLayout>
       {/* Toolbar */}
       <div className="shrink-0 flex flex-col gap-2">
         <div
@@ -793,7 +846,7 @@ function IntegrationCard({
             <p className="text-white/80 text-xs font-display tracking-wide leading-tight">
               {integration.name}
             </p>
-            <span className="text-[9px] font-display tracking-widest uppercase" style={{ color: "oklch(0.75 0.15 175)" }}>
+            <span className="text-[9px] font-display tracking-widest uppercase" style={{ color: "hsl(var(--teal))" }}>
               {integration.category}
             </span>
           </div>
@@ -876,7 +929,7 @@ function IntegrationCard({
             disabled={!WORKER_CONFIGURED}
             title={!WORKER_CONFIGURED ? "Set VITE_WORKER_URL in .env" : "Connect via OAuth"}
             className="flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-display tracking-widest uppercase transition-all cursor-pointer hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: "oklch(0.75 0.15 175 / 12%)", border: "1px solid oklch(0.75 0.15 175 / 30%)", color: "oklch(0.75 0.15 175)" }}
+            style={{ background: "hsl(var(--teal) / 0.12)", border: "1px solid hsl(var(--teal) / 0.30)", color: "hsl(var(--teal))" }}
           >
             <RefreshCw size={9} />
             OAUTH
@@ -931,7 +984,7 @@ function ConnectModal({ name, canOAuth, mode, onClose, onSaveKey, onStartOAuth }
           </p>
 
           <div>
-            <label className="text-[9px] font-display tracking-wider block mb-1" style={{ color: "oklch(0.75 0.15 175)" }}>
+            <label className="text-[9px] font-display tracking-wider block mb-1" style={{ color: "hsl(var(--teal))" }}>
               ACCOUNT LABEL / EMAIL
             </label>
             <input
@@ -945,7 +998,7 @@ function ConnectModal({ name, canOAuth, mode, onClose, onSaveKey, onStartOAuth }
 
           {mode === "apikey" && (
             <div>
-              <label className="text-[9px] font-display tracking-wider block mb-1" style={{ color: "oklch(0.75 0.15 175)" }}>
+              <label className="text-[9px] font-display tracking-wider block mb-1" style={{ color: "hsl(var(--teal))" }}>
                 API KEY
               </label>
               <input

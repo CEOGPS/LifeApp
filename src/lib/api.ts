@@ -1,7 +1,9 @@
 // src/lib/api.ts
 
 const API_BASE =
-  (import.meta.env.VITE_WORKER_URL as string | undefined) ??
+  ((import.meta as ImportMeta & {
+    env?: { VITE_WORKER_URL?: string };
+  }).env?.VITE_WORKER_URL as string | undefined) ??
   "https://lifeos1-api.ceogps.workers.dev";
 
 export class ApiError extends Error {
@@ -95,7 +97,42 @@ function createApiClient(): ApiClient {
 }
 
 export const api = createApiClient();
-export const lifeosApi = createApiClient();
+export const lifeosApi: ApiClient = createApiClient();
+
+export async function invokeLLMWithAuth({
+  prompt,
+  systemPrompt,
+  model,
+  accessToken,
+}: {
+  prompt: string | any[];
+  systemPrompt?: string;
+  model?: string;
+  accessToken?: string;
+}) {
+  const WORKER_URL =
+    (import.meta as ImportMeta & {
+      env?: { VITE_WORKER_URL?: string };
+    }).env?.VITE_WORKER_URL || "https://lifeos1-api.ceogps.workers.dev";
+  const res = await fetch(`${WORKER_URL}/api/llm/invoke`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify({
+      prompt,
+      systemPrompt,
+      model: model || "auto",
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`LLM invocation failed: ${res.statusText}`);
+  }
+
+  return res.text();
+}
 
 export interface ApiResponse<T = unknown> {
   ok: boolean;

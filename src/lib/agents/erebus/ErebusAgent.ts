@@ -10,11 +10,11 @@ import { parseAndRunErebusTools } from "./ErebusTools.js";
 // ── SSE streaming from Python backend ────────────────────────────────────────
 
 export async function runAgenticTask(
-  task,
+  task: string,
   context = "",
-  onStep,
-  onDone,
-  onError,
+  onStep?: (event: unknown) => void,
+  onDone?: (event: unknown) => void,
+  onError?: (message: string) => void,
 ) {
   try {
     const resp = await fetch(BACKEND + "/stream", {
@@ -26,7 +26,11 @@ export async function runAgenticTask(
 
     if (!resp.ok) throw new Error(`Backend ${resp.status}`);
 
-    const reader = resp.body.getReader();
+    const reader = resp.body?.getReader();
+    if (!reader) {
+      onError?.("No response body");
+      return;
+    }
     const decoder = new TextDecoder();
     let buffer = "";
 
@@ -36,7 +40,7 @@ export async function runAgenticTask(
 
       buffer += decoder.decode(value, { stream: true });
       const parts = buffer.split("\n\n");
-      buffer = parts.pop(); // keep incomplete chunk
+      buffer = parts.pop() || ""; // keep incomplete chunk
 
       for (const part of parts) {
         const line = part.trim();
@@ -63,13 +67,13 @@ export async function runAgenticTask(
       }
     }
   } catch (e) {
-    onError?.(e.message);
+    onError?.(e instanceof Error ? e.message : String(e));
   }
 }
 
 // ── Non-streaming task (single response) ─────────────────────────────────────
 
-export async function runTaskSync(task, context = "") {
+export async function runTaskSync(task: string, context = "") {
   try {
     const r = await fetch(BACKEND + "/task", {
       method: "POST",
@@ -88,7 +92,15 @@ export async function runTaskSync(task, context = "") {
 // ── Single-step reasoning with tool parsing ───────────────────────────────────
 // Used when backend is offline (cloud Worker path)
 
-export async function runSingleTurn(core, msg) {
+interface ErebusCore {
+  reason: (msg: string) => Promise<{ response: string; model: string }>;
+  remember: (role: string, content: string) => void;
+  extractAndLearn: (response: string) => void;
+  backendOnline: boolean;
+  syncLifeOSData: () => Promise<void>;
+}
+
+export async function runSingleTurn(core: ErebusCore, msg: string) {
   const { response, model } = await core.reason(msg);
   const { text, toolResults } = await parseAndRunErebusTools(response);
   core.remember("user", msg);
@@ -99,7 +111,7 @@ export async function runSingleTurn(core, msg) {
 
 // ── Sync LifeOS data to backend ───────────────────────────────────────────────
 
-export async function syncToBackend(core) {
+export async function syncToBackend(core: ErebusCore) {
   if (!core.backendOnline) return;
   await core.syncLifeOSData();
 }

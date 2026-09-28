@@ -1,5 +1,5 @@
 import { Navigate, Outlet } from "react-router-dom";
-import { useAuth } from "@/lib/SupabaseAuthContext";
+import { useAuth } from "../../lib/SupabaseAuthContext";
 import { motion } from "framer-motion";
 
 export default function ProtectedRoute() {

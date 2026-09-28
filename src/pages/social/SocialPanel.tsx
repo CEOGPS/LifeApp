@@ -11,9 +11,8 @@ import {
 import {
   Share2, Download, Rss, Loader2, Check, AlertCircle, Sparkles, X,
 } from "lucide-react";
-import { lifeosApi } from "@/lib/lifeosApi";
-import { invokeLLM } from "@/lib/invokeLLM";
-import { usePersistentState } from "@/lib/usePersistentState";
+import { api, lifeosApi } from "../../lib/api";
+import { invokeLLM } from "../../lib/llm";
 
 // No need for local invokeLLM helper, using centralized @/lib/invokeLLM
 
@@ -235,7 +234,7 @@ async function kvLoad<T>(key: string, fallback: T): Promise<T> {
 }
 async function kvSave(key: string, value: unknown): Promise<void> {
   try {
-    await lifeosApi(`/api/kv/${encodeURIComponent(key)}`, { method: "POST", body: value });
+    await lifeosApi(`/api/kv/${encodeURIComponent(key)}`, { method: "POST", body: JSON.stringify(value) });
   } catch (e) {
     console.warn(`[social] kvSave(${key}) failed:`, e);
   }
@@ -459,13 +458,12 @@ function Composer({
   const callAI = async (prompt: string, kind: "generate" | "improve") => {
     setAiLoading(kind);
     setError("");
-    const res = await invokeLLM({ prompt, maxTokens: 400 });
-    if (!res.ok) {
-      setError(`AI (${res.reason}): ${res.detail}`);
-      setAiLoading(null);
-      return;
+    try {
+      const res = await invokeLLM({ prompt });
+      setText(res.text.trim());
+    } catch (e) {
+      setError(`AI failed: ${e instanceof Error ? e.message : String(e)}`);
     }
-    setText(res.text.trim());
     setAiLoading(null);
   };
 
@@ -716,7 +714,7 @@ function AccountsModal({
         body.channel_handle = tf.channel_handle ?? "@ceogps";
       }
       const d = await lifeosApi<{ ok?: boolean; error?: string; name?: string; handle?: string }>(
-        "/api/oauth/token/save", { method: "POST", body },
+        "/api/oauth/token/save", { method: "POST", body: JSON.stringify(body) },
       );
       if (d.ok) {
         setMessages((prev) => ({
@@ -1027,11 +1025,21 @@ export default function SocialPanel() {
       });
     }).catch(() => null);
 
-    api.get<{ tweets?: Array<{ id: string; text: string; likes: number; replies: number; impressions: number; retweets: number; createdAt: string; url: string }> }>(
+    interface XTweet {
+      id: string;
+      text: string;
+      likes: number;
+      replies: number;
+      impressions: number;
+      retweets: number;
+      createdAt: string;
+      url: string;
+    }
+    api.get<{ tweets?: XTweet[] }>(
       "/api/x/timeline?handle=ceogps&max=10",
     ).then((data) => {
       if (cancelled || !data?.tweets?.length) return;
-      setXTweets(data.tweets.map((t: { id: any; text: any; likes: any; replies: any; impressions: any; retweets: any; createdAt: any; url: any; }) => ({
+      setXTweets(data.tweets.map((t: XTweet) => ({
         id: t.id, platform: "x" as const, text: t.text,
         likes: t.likes, comments: t.replies, views: t.impressions, shares: t.retweets,
         time: t.createdAt, permalink: t.url, real: true,
@@ -1055,17 +1063,34 @@ export default function SocialPanel() {
         persistStates(u); return u;
       });
 
+      interface MetaFeedItem {
+        id: string;
+        message?: string;
+        likes?: { summary?: { total_count?: number } };
+        comments?: { summary?: { total_count?: number } };
+        created_time: string;
+      }
+      interface IgFeedItem {
+        id: string;
+        caption?: string;
+        like_count?: number;
+        comments_count?: number;
+        media_url?: string;
+        thumbnail_url?: string;
+        permalink?: string;
+        timestamp: string;
+      }
       Promise.all([
-        api.get<{ data?: Array<{ id: string; message?: string; likes?: { summary?: { total_count?: number } }; comments?: { summary?: { total_count?: number } }; created_time: string }> }>("/api/meta/feed?limit=8").catch(() => null),
-        api.get<{ data?: Array<{ id: string; caption?: string; like_count?: number; comments_count?: number; media_url?: string; thumbnail_url?: string; permalink?: string; timestamp: string }> }>("/api/meta/instagram/feed?limit=10").catch(() => null),
+        api.get<{ data?: MetaFeedItem[] }>("/api/meta/feed?limit=8").catch(() => null),
+        api.get<{ data?: IgFeedItem[] }>("/api/meta/instagram/feed?limit=10").catch(() => null),
       ]).then(([feed, igMedia]) => {
         if (cancelled) return;
-        if (feed?.data) setMetaFeed(feed.data.map((p) => ({
+        if (feed?.data) setMetaFeed(feed.data.map((p: MetaFeedItem) => ({
           id: p.id, platform: "facebook" as const, text: p.message ?? "",
           likes: p.likes?.summary?.total_count ?? 0, comments: p.comments?.summary?.total_count ?? 0,
           time: p.created_time, real: true,
         })));
-        if (igMedia?.data) setIgFeed(igMedia.data.map((p) => ({
+        if (igMedia?.data) setIgFeed(igMedia.data.map((p: IgFeedItem) => ({
           id: p.id, platform: "instagram" as const, text: p.caption ?? "",
           likes: p.like_count ?? 0, comments: p.comments_count ?? 0,
           img: p.thumbnail_url ?? p.media_url, permalink: p.permalink,
@@ -1110,14 +1135,14 @@ export default function SocialPanel() {
         const pid = data.provider;
         setConnecting(null);
         if (pid === "x") {
-          api.get<{ tweets?: unknown[] }>("/api/x/timeline?handle=ceogps&max=1").then((d) => {
+          api.get<{ tweets?: unknown[] }>("/api/x/timeline?handle=ceogps&max=1").then((d: { tweets?: unknown[] } | null) => {
             setPlatforms((prev) => {
               const u = prev.map((p) => p.id === "x" ? { ...p, connected: !!d?.tweets?.length } : p);
               persistStates(u); return u;
             });
           }).catch(() => null);
         } else if (pid === "facebook" || pid === "instagram") {
-          api.get<{ data?: unknown[] }>("/api/meta/feed?limit=1").then((feed) => {
+          api.get<{ data?: unknown[] }>("/api/meta/feed?limit=1").then((feed: { data?: unknown[] } | null) => {
             setPlatforms((prev) => {
               const has = !!feed?.data?.length;
               const u = prev.map((p) => p.id === pid ? { ...p, connected: has } : p);

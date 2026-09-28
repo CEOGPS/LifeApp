@@ -1,4 +1,3 @@
-// @ts-nocheck -- deep agent logic; typing deferred
 // ErebusMedia.ts — Direct-API media generation for Erebus
 //
 // Fixes in this revision:

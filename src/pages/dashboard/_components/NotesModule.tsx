@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Plus, Save, FileText, Trash2 } from "lucide-react";
-import { usePersistentState } from "@/lib/usePersistentState.ts";
+import { usePersistentState } from "@/lib/usePersistentState";
 
 type Note = { id: string; title: string; content: string; ts: string };
 
@@ -16,7 +16,7 @@ export default function NotesModule() {
     setIsNew(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!draft.title && !draft.content) return;
     const note: Note = {
       id: Date.now().toString(),
@@ -27,7 +27,7 @@ export default function NotesModule() {
         minute: "2-digit",
       }),
     };
-    setNotes((n) => [note, ...n]);
+    await setNotes((n) => [note, ...n]);
     setActive(note);
     setIsNew(false);
   };
@@ -38,8 +38,8 @@ export default function NotesModule() {
     setIsNew(false);
   };
 
-  const del = (id: string) => {
-    setNotes((n) => n.filter((x) => x.id !== id));
+  const del = async (id: string) => {
+    await setNotes((n) => n.filter((x) => x.id !== id));
     if (active?.id === id) {
       setActive(null);
       setIsNew(false);

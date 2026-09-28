@@ -1,10 +1,11 @@
 // src/api/ceogpsclient.tsx
 // CEO GPS AI Client - Multi-model router with auth
 
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../lib/supabaseClient";
 
 const WORKER_URL =
-  import.meta.env.VITE_WORKER_URL || "https://lifeos1-api.ceogps.workers.dev";
+  (import.meta as ImportMeta & { env?: { VITE_WORKER_URL?: string } }).env
+    ?.VITE_WORKER_URL || "https://lifeos1-api.ceogps.workers.dev";
 
 const SYSTEM =
   "You are AgentZero, the AI core of LifeOS1. Be direct, strategic, actionable.";

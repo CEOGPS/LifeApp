@@ -26,15 +26,31 @@ import {
   Upload, Shield, Zap, Clock, Calendar, X, Loader2, Download, Info,
   Check, Save, Pencil, Eye,
 } from "lucide-react";
-import { supabase } from "@/lib/supabaseClient";
-import { invokeLLM as invokeLLMAuthorized } from "@/api/ceogpsclient";
+import { supabase } from "../../lib/supabaseClient";
+import { createClient } from "@supabase/supabase-js";
 
 type LLMResult = { ok: boolean; text: string; reason?: string };
 
+async function invokeLLMAuthorized({
+  prompt,
+  accessToken,
+}: {
+  prompt: string;
+  accessToken: string;
+}): Promise<string> {
+  const { data, error } = await supabase.functions.invoke("invoke-llm", {
+    body: { prompt },
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (error) throw error;
+  return typeof data === "string" ? data : data?.text ?? "";
+}
+
 async function invokeLLM({ prompt }: { prompt: string }): Promise<LLMResult> {
   try {
-    const { data: session } = await supabase.auth.getSession();
-    const accessToken = session?.access_token;
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token ?? null;
 
     if (!accessToken) {
       return {
@@ -61,11 +77,6 @@ async function invokeLLM({ prompt }: { prompt: string }): Promise<LLMResult> {
     };
   }
 }
-
-const supabase = createClient(
-  (import.meta as ImportMeta & { env: Record<string, string> }).env.VITE_SUPABASE_URL,
-  (import.meta as ImportMeta & { env: Record<string, string> }).env.VITE_SUPABASE_ANON_KEY,
-);
 
 function PanelLayout({
   title,
@@ -196,7 +207,7 @@ const PROVIDER_LABEL: Record<Provider, string> = {
   imap:    "IMAP",
 };
 
-const TEAL = "oklch(0.75 0.15 175)";
+const TEAL = "hsl(var(--teal))";
 const TOAST_MS = 4200;
 
 const LS = {

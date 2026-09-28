@@ -4,16 +4,103 @@
 // Budget stored as integer cents. No fake "hours this week" — read from projects_hours.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import {
   FolderKanban, Plus, BarChart3, ArrowRight, X, Search, Download,
   Copy, Sparkles, Loader2, AlertCircle, CheckCircle, Info, Trash2,
   Pencil, Clock, LayoutGrid, List as ListIcon, ChevronLeft, Users,
 } from "lucide-react";
-import PanelLayout from "@/components/layout/PanelLayout";
-import { lifeosApi } from "@/lib/lifeosApi";
-import { invokeLLM } from "@/lib/invokeLLM";
-import { useUserEmail } from "@/hooks/useUserEmail";
-import { usePersistentState } from "@/lib/usePersistentState";
+/** Small local API client kept here so this panel does not depend on a
+ * missing path alias module. */
+async function lifeosApi<T = unknown>(
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const response = await fetch(path, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init.headers || {}),
+    },
+  });
+
+  const text = await response.text();
+  let payload: unknown = null;
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch {
+    payload = text;
+  }
+
+  if (!response.ok) {
+    const message =
+      typeof payload === "object" && payload !== null && "error" in payload
+        ? String((payload as { error: unknown }).error)
+        : response.statusText || "Request failed";
+    const error = new Error(message);
+    if (init.signal?.aborted) error.name = "AbortError";
+    throw error;
+  }
+
+  return payload as T;
+}
+
+interface LLMResponse {
+  text?: string;
+  content?: string;
+}
+
+async function invokeLLM(input: { prompt: string }): Promise<LLMResponse> {
+  return lifeosApi<LLMResponse>("/api/llm", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+function usePersistentState<T>(key: string, initialValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const stored = window.localStorage.getItem(key);
+      return stored == null ? initialValue : JSON.parse(stored) as T;
+    } catch {
+      return initialValue;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      // Ignore unavailable or restricted storage.
+    }
+  }, [key, value]);
+
+  return [value, setValue];
+}
+
+interface PanelLayoutProps {
+  title: string;
+  subtitle?: string;
+  icon?: ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
+}
+
+function PanelLayout({ title, subtitle, icon, actions, children }: PanelLayoutProps) {
+  return (
+    <section className="h-full flex flex-col min-h-0 p-4 gap-3">
+      <header className="flex items-center gap-2 shrink-0">
+        {icon && <span className="text-primary">{icon}</span>}
+        <div className="min-w-0">
+          <h1 className="text-base text-white/90 font-display truncate">{title}</h1>
+          {subtitle && <p className="text-[10px] text-white/35 truncate">{subtitle}</p>}
+        </div>
+        {actions && <div className="ml-auto">{actions}</div>}
+      </header>
+      <div className="flex-1 min-h-0">{children}</div>
+    </section>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -157,8 +244,6 @@ function projectProgress(p: Project): { done: number; total: number; pct: number
 /* ------------------------------------------------------------------ */
 
 export default function ProjectsPanel() {
-  useUserEmail(); // auth-scoped Worker calls
-
   /* ---- persisted UI state ---- */
   const [view, setView] = usePersistentState<View>(LS.view, "board");
   const [statusFilter, setStatusFilter] = usePersistentState<"All" | Stage>(LS.status, "All");
@@ -294,7 +379,7 @@ export default function ProjectsPanel() {
     if (!editModal.name?.trim()) { pushToast("error", "Project name is required"); return; }
     setSaving(true);
     try {
-      const body = {
+      const body = JSON.stringify({
         name: editModal.name.trim(),
         client_name: editModal.client_name?.trim() || null,
         contact_id: editModal.contact_id || null,
@@ -309,7 +394,7 @@ export default function ProjectsPanel() {
         site_lat: editModal.site_lat ?? null,
         site_lng: editModal.site_lng ?? null,
         site_address: editModal.site_address || null,
-      };
+      });
       if (editModal.id) {
         await lifeosApi(`/api/projects/${editModal.id}`, { method: "PATCH", body });
         pushToast("success", "Project updated");
@@ -344,7 +429,7 @@ export default function ProjectsPanel() {
     const next = STAGES[Math.min(idx + 1, 3)]; // never advances into On Hold; that's manual
     if (next === p.status) return;
     try {
-      await lifeosApi(`/api/projects/${p.id}`, { method: "PATCH", body: { status: next } });
+      await lifeosApi(`/api/projects/${p.id}`, { method: "PATCH", body: JSON.stringify({ status: next }) });
       pushToast("success", `Moved to ${next}`);
       await loadAll();
     } catch (e: any) {
@@ -354,7 +439,7 @@ export default function ProjectsPanel() {
 
   const changeStatus = useCallback(async (id: string, status: Stage) => {
     try {
-      await lifeosApi(`/api/projects/${id}`, { method: "PATCH", body: { status } });
+      await lifeosApi(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
       await loadAll();
     } catch (e: any) {
       pushToast("error", e?.message || "Failed to update status");
@@ -367,7 +452,7 @@ export default function ProjectsPanel() {
     try {
       await lifeosApi(`/api/projects/${activeProject.id}/tasks`, {
         method: "POST",
-        body: { text: taskInput.trim(), position: (activeProject.tasks?.length || 0) },
+        body: JSON.stringify({ text: taskInput.trim(), position: (activeProject.tasks?.length || 0) }),
       });
       setTaskInput("");
       await loadAll();
@@ -380,7 +465,7 @@ export default function ProjectsPanel() {
     try {
       await lifeosApi(`/api/projects/tasks/${task.id}`, {
         method: "PATCH",
-        body: { done: !task.done },
+        body: JSON.stringify({ done: !task.done }),
       });
       await loadAll();
     } catch (e: any) {
@@ -403,7 +488,7 @@ export default function ProjectsPanel() {
     try {
       await lifeosApi(`/api/projects/${projectId}/hours`, {
         method: "POST",
-        body: { hours, logged_on: todayIso() },
+        body: JSON.stringify({ hours, logged_on: todayIso() }),
       });
       pushToast("success", `Logged ${hours}h`);
       await loadAll();
@@ -491,7 +576,7 @@ export default function ProjectsPanel() {
         for (let i = 0; i < tasks.length; i++) {
           await lifeosApi(`/api/projects/${activeProject.id}/tasks`, {
             method: "POST",
-            body: { text: tasks[i], position: (activeProject.tasks?.length || 0) + i },
+            body: JSON.stringify({ text: tasks[i], position: (activeProject.tasks?.length || 0) + i }),
           });
         }
         pushToast("success", `Added ${tasks.length} suggested tasks`);
@@ -617,7 +702,7 @@ export default function ProjectsPanel() {
           <div className="flex gap-1 flex-wrap">
             {(["All", ...STAGES] as const).map((s) => {
               const isActive = statusFilter === s;
-              const color = s === "All" ? "oklch(0.75 0.15 175)" : STAGE_COLORS[s as Stage];
+              const color = s === "All" ? "hsl(var(--teal))" : STAGE_COLORS[s as Stage];
               return (
                 <button
                   key={s}
@@ -954,7 +1039,7 @@ export default function ProjectsPanel() {
                     try {
                       await lifeosApi(`/api/projects/${activeProject.id}`, {
                         method: "PATCH",
-                        body: { notes: e.target.value },
+                        body: JSON.stringify({ notes: e.target.value }),
                       });
                       pushToast("success", "Notes saved");
                     } catch (err: any) {

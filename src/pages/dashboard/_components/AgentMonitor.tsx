@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Bot, Play, Circle, CheckCircle2, Loader2 } from "lucide-react";
-import { lifeosApi } from "@/lib/api.ts";
+import { lifeosApi } from "../../../lib/api";
 
 type AgentDef = { id: string; name: string; desc: string };
 type AgentStatusEntry = {
@@ -18,8 +18,8 @@ export default function AgentMonitor() {
   const refresh = async () => {
     try {
       const [agentList, statusMap] = await Promise.all([
-        lifeosApi.get("/api/agents"),
-        lifeosApi.get("/api/agents/status"),
+        lifeosApi.get<AgentDef[]>("/api/agents"),
+        lifeosApi.get<Record<string, AgentStatusEntry>>("/api/agents/status"),
       ]);
       setAgents(agentList);
       setStatus(statusMap);

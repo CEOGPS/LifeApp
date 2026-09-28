@@ -4,7 +4,7 @@
    Criminal law features are educational & procedural only — not legal advice.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from "react";
 import {
   Scale, Lock, ShieldCheck, FileText, Key, AlertTriangle, Plus,
   Eye, EyeOff, Search, Upload, Copy, RefreshCw, Download, X,
@@ -16,20 +16,83 @@ import {
   CheckSquare, Square, ChevronDown, ChevronUp, HelpCircle,
   Ban, FileWarning, Landmark, Building2, HandHeart,
 } from "lucide-react";
-import PanelLayout from "@/components/layout/PanelLayout";
-import { invokeLLM } from "@/lib/invokeLLM";
-import { lifeosApi } from "@/lib/lifeosApi";
-import { useUserEmail } from "@/hooks/useUserEmail";
-import { usePersistentState } from "@/lib/usePersistentState";
+function PanelLayout({
+  title,
+  subtitle,
+  icon,
+  className = "",
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  icon?: ReactNode;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className={`flex flex-col rounded-xl border border-white-10 bg-[#0d0e17] text-white ${className}`}>
+      <header className="flex items-center gap-3 border-b border-white-10 px-5 py-4">
+        {icon && <span className="text-teal">{icon}</span>}
+        <div>
+          <h2 className="font-semibold">{title}</h2>
+          {subtitle && <p className="text-sm text-white-50">{subtitle}</p>}
+        </div>
+      </header>
+      <div className="min-h-0 flex-1">{children}</div>
+    </section>
+  );
+}
+
+function useUserEmail() {
+  const [email, setEmail] = useState("");
+
+  useEffect(() => {
+    try {
+      const storedEmail = localStorage.getItem("user_email")
+        ?? localStorage.getItem("email")
+        ?? "";
+      setEmail(storedEmail);
+    } catch {
+      setEmail("");
+    }
+  }, []);
+
+  return { email };
+}
 
 /* ════════════════════════════════════════════════════════════════════════════
    ░ SECTION 0 — CONFIG / CONSTANTS
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const ENV = {
-  WORKER_URL: import.meta.env?.VITE_WORKER_URL ?? "https://lifeos1-api.ceogps.workers.dev",
-  API_TOKEN: import.meta.env?.VITE_API_TOKEN as string | undefined,
+  WORKER_URL:
+    (import.meta as ImportMeta & { env?: { VITE_WORKER_URL?: string } }).env
+      ?.VITE_WORKER_URL ?? "https://lifeos1-api.ceogps.workers.dev",
+  API_TOKEN: (
+    (import.meta as ImportMeta & { env?: { VITE_API_TOKEN?: string } }).env
+      ?.VITE_API_TOKEN
+  ) as string | undefined,
 } as const;
+
+type LLMRequest = { prompt: string; systemPrompt?: string };
+type LLMResponse = { text?: string; content?: string };
+
+async function invokeLLM({ prompt, systemPrompt }: LLMRequest): Promise<LLMResponse> {
+  const response = await fetch(`${ENV.WORKER_URL}/llm`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(ENV.API_TOKEN ? { Authorization: `Bearer ${ENV.API_TOKEN}` } : {}),
+    },
+    body: JSON.stringify({ prompt, systemPrompt }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`AI request failed (${response.status})`);
+  }
+
+  return (await response.json()) as LLMResponse;
+}
 
 const LS_KEYS = {
   ACTIVE_TAB: "lifeos_legal_active_tab",
@@ -67,6 +130,16 @@ function lsSet(key: string, value: unknown) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {}
+}
+
+function usePersistentState<T>(key: string, initialValue: T) {
+  const [value, setValue] = useState<T>(() => lsGet(key, initialValue));
+
+  useEffect(() => {
+    lsSet(key, value);
+  }, [key, value]);
+
+  return [value, setValue] as const;
 }
 
 function uid() {

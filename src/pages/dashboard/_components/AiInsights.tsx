@@ -1,23 +1,24 @@
 import { useState } from "react";
 import { Brain, RefreshCw, Loader2 } from "lucide-react";
-import { lifeosApi } from "@/lib/api.ts";
-import { usePersistentState } from "@/lib/usePersistentState.ts";
 
 export default function AiInsights() {
-  const [insights, setInsights] = usePersistentState<string[]>(
-    "dashboard_ai_insights",
-    [],
-  );
+  const [insights, setInsights] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
   const analyze = async () => {
     setLoading(true);
     try {
-      const { text } = await lifeosApi.post("/api/llm/invoke", {
-        prompt:
-          "Give 2 short, punchy cross-domain business insights (each under 20 words) for a busy Atlanta plumbing/electrical business owner who also runs a marketing agency and builds software. Return ONLY a JSON array of 2 strings, no markdown.",
-        max_tokens: 300,
+      const response = await fetch("/api/llm/invoke", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt:
+            "Give 2 short, punchy cross-domain business insights (each under 20 words) for a busy Atlanta plumbing/electrical business owner who also runs a marketing agency and builds software. Return ONLY a JSON array of 2 strings, no markdown.",
+          max_tokens: 300,
+        }),
       });
+      if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+      const { text } = (await response.json()) as { text: string };
       const cleaned = text.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(cleaned);
       if (Array.isArray(parsed)) setInsights(parsed);

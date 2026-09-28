@@ -1,6 +1,25 @@
-import type { ReactNode } from "react";
+import { useCallback, useRef, type MouseEvent, type ReactNode } from "react";
 import { motion } from "motion/react";
-import { useModuleTilt } from "@/hooks/use-module-tilt.ts";
+
+function useModuleTilt() {
+  const ref = useRef<HTMLDivElement>(null);
+
+  const onMouseMove = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    const element = ref.current;
+    if (!element) return;
+
+    const bounds = element.getBoundingClientRect();
+    const x = (event.clientX - bounds.left) / bounds.width - 0.5;
+    const y = (event.clientY - bounds.top) / bounds.height - 0.5;
+    element.style.transform = `perspective(1000px) rotateX(${-y * 4}deg) rotateY(${x * 4}deg)`;
+  }, []);
+
+  const onMouseLeave = useCallback(() => {
+    if (ref.current) ref.current.style.transform = "";
+  }, []);
+
+  return { ref, onMouseMove, onMouseLeave };
+}
 
 type ModuleProps = {
   title: string;
@@ -39,7 +58,7 @@ export default function Module({
             >
               <div className="flex items-center gap-2">
                 <span className="text-primary">{icon}</span>
-                <span className="font-display text-base tracking-wider uppercase text-white-90">
+                <span className="font-display text-base tracking-wider uppercase text-white/90">
                   {title}
                 </span>
               </div>
@@ -47,7 +66,7 @@ export default function Module({
             </div>
 
             {/* Body */}
-            <div className="flex-1 overflow-hidden p-4 text-white-85">{children}</div>
+            <div className="flex-1 overflow-hidden p-4 text-white/85">{children}</div>
     </motion.div>
   );
 }

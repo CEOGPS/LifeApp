@@ -1,7 +1,7 @@
 // src/lib/invokeLLM.ts
 // Simplified LLM wrapper that delegates to the authorized AI router
 
-import { invokeLLMWithAuth } from "./api/ceogpsclient";
+import { invokeLLMWithAuth } from "./api";
 import { supabase } from "./supabaseClient";
 
 export async function invokeLLM({

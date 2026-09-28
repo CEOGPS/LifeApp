@@ -1,7 +1,7 @@
 // src/panels/CRMPanel.tsx
 // LifeOS1 — CRM Panel (Path B: pipeline view over /api/contacts)
 // Single-file strict TSX. All types/helpers/constants inline except shared SOCIALS/MESSAGING.
-// No new dependencies. Known imports only.
+import { Table2 } from "lucide-react";
 
 import React, {
   useCallback,
@@ -10,17 +10,140 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { PanelLayout } from "../components/PanelLayout";
-import { useUserEmail } from "../hooks/useUserEmail";
-import { supabase } from "@/lib/supabaseClient";
+import { createClient } from "@supabase/supabase-js";
 
-// Re-export shared platform lists from ContactsPanel so CRM and Contacts
-// cannot drift. Importing them re-runs the ContactsPanel module, which is
-// fine — the panel default export is not rendered by the import.
-import { SOCIALS, MESSAGING } from "./ContactsPanel";
+// Keep this panel self-contained: some builds do not include the shared layout.
+function PanelLayout({
+  title,
+  subtitle,
+  icon,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="min-h-full p-4 text-zinc-100">
+      <header className="mb-5 flex items-center gap-3">
+        {icon && <span className="text-emerald-400">{icon}</span>}
+        <div>
+          <h1 className="text-xl font-semibold">{title}</h1>
+          {subtitle && <p className="text-xs text-zinc-500">{subtitle}</p>}
+        </div>
+      </header>
+      {children}
+    </section>
+  );
+}
+
+// Keep this panel self-contained: some builds do not include the shared hook.
+function useUserEmail(): string {
+  const [email, setEmail] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    void supabase.auth.getUser().then(({ data }) => {
+      if (active) setEmail(data.user?.email ?? "");
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return email;
+}
+
+// Keep these options local: the Contacts page is not available in every build.
+const SOCIALS = [
+  "facebook",
+  "instagram",
+  "linkedin",
+  "twitter",
+  "x",
+  "tiktok",
+  "youtube",
+  "github",
+  "other",
+] as const;
+
+const MESSAGING = [
+  "whatsapp",
+  "telegram",
+  "signal",
+  "messenger",
+  "sms",
+  "other",
+] as const;
+
+const supabase = createClient(
+  (import.meta as ImportMeta & { env: Record<string, string | undefined> }).env
+    .VITE_SUPABASE_URL as string,
+  (import.meta as ImportMeta & { env: Record<string, string | undefined> }).env
+    .VITE_SUPABASE_ANON_KEY as string,
+);
+
+type ApiOptions = RequestInit;
+
+const lifeosApi = {
+  async request(method: string, url: string, body?: unknown, options: ApiOptions = {}) {
+    const headers = new Headers(options.headers);
+    const formData = body instanceof FormData;
+    if (body !== undefined && !formData && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+
+    const response = await fetch(url, {
+      ...options,
+      method,
+      headers,
+      body:
+        body === undefined
+          ? undefined
+          : formData
+            ? (body as FormData)
+            : JSON.stringify(body),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      const error = new Error(
+        data?.error || data?.message || `Request failed (${response.status})`,
+      ) as Error & { response?: { data?: unknown } };
+      error.response = { data };
+      throw error;
+    }
+    return data;
+  },
+  post(url: string, body?: unknown, options?: ApiOptions) {
+    return this.request("POST", url, body, options);
+  },
+  patch(url: string, body?: unknown, options?: ApiOptions) {
+    return this.request("PATCH", url, body, options);
+  },
+  delete(url: string, options?: ApiOptions) {
+    return this.request("DELETE", url, undefined, options);
+  },
+};
+
+async function invokeLLM({ prompt }: { prompt: string }): Promise<any> {
+  const response = await fetch("/api/llm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt }),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(
+      body?.error || body?.message || `LLM request failed (${response.status})`,
+    );
+  }
+  return body?.data ?? body;
+}
 
 // ---------------------------------------------------------------------------
-// Types
+// Types (adapted to existing Supabase schema: flat contacts table + metadata JSONB)
+// Pipeline fields (stage, tag, value, source) are stored in metadata JSONB
 // ---------------------------------------------------------------------------
 
 export type Stage =
@@ -69,33 +192,41 @@ interface ExtraRow {
   value: string;
 }
 
+// Matches the actual DB schema: flat contacts table with metadata JSONB for nested data
+// Pipeline fields (stage, tag, value, source) live in metadata.crm.*
 export interface CRMContact {
   id: string;
-  first_name: string;
-  last_name: string;
-  full_name: string;
-  company: string;
-  job_title: string;
-  address: string;
-  city: string;
-  state: string;
-  zip: string;
-  birthday: string | null;
-  notes: string;
-  image_upload: string | null;
-  tags: string[];
-  color: string | null;
-  last_touch: string | null;
+  // Core fields from DB
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  avatar_url: string | null;
+  company: string | null;
+  job_title: string | null;
+  linkedin_url: string | null;
+  tags: string[] | null;
+  metadata: Record<string, any> | null;
   created_at: string | null;
   updated_at: string | null;
-  // Path B child arrays
+  // Derived fields (from metadata)
+  first_name: string | null;
+  last_name: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  birthday: string | null;
+  notes: string | null;
+  image_upload: string | null;
+  color: string | null;
+  last_touch: string | null;
   phones: PhoneRow[];
   emails: EmailRow[];
   websites: WebsiteRow[];
   socials: SocialRow[];
   messaging: MessagingRow[];
   extra: ExtraRow[];
-  // Pipeline fields live in extra under crm.* keys
+  // Pipeline fields (from metadata.crm.*)
   stage: Stage;
   tag: Tag;
   value: string;
@@ -249,29 +380,37 @@ function downloadCsv(filename: string, content: string): void {
 function emptyContact(): CRMContact {
   return {
     id: "",
-    first_name: "",
-    last_name: "",
+    // Core DB fields
     full_name: "",
+    email: null,
+    phone: null,
+    avatar_url: null,
     company: "",
     job_title: "",
-    address: "",
-    city: "",
-    state: "",
-    zip: "",
-    birthday: null,
-    notes: "",
-    image_upload: null,
+    linkedin_url: null,
     tags: [],
-    color: null,
-    last_touch: null,
+    metadata: {},
     created_at: null,
     updated_at: null,
+    // Derived from metadata
+    first_name: null,
+    last_name: null,
+    address: null,
+    city: null,
+    state: null,
+    zip: null,
+    birthday: null,
+    notes: null,
+    image_upload: null,
+    color: null,
+    last_touch: null,
     phones: [],
     emails: [],
     websites: [],
     socials: [],
     messaging: [],
     extra: [],
+    // Pipeline fields (from metadata.crm.*)
     stage: "Lead",
     tag: "New",
     value: "",
@@ -279,32 +418,25 @@ function emptyContact(): CRMContact {
   };
 }
 
-// Extract crm.* pipeline fields from extra rows.
-function extractPipeline(extra: ExtraRow[]): {
+// Extract crm.* pipeline fields from metadata.crm.
+function extractPipeline(meta: Record<string, any>): {
   stage: Stage;
   tag: Tag;
   value: string;
   source: string;
 } {
+  const crm = meta?.crm && typeof meta.crm === "object" ? meta.crm : {};
   let stage: Stage = "Lead";
   let tag: Tag = "New";
   let value = "";
   let source = "";
-  for (const row of extra) {
-    if (row.key === EXTRA_STAGE && STAGES.includes(row.value as Stage)) {
-      stage = row.value as Stage;
-    } else if (row.key === EXTRA_TAG && TAGS.includes(row.value as Tag)) {
-      tag = row.value as Tag;
-    } else if (row.key === EXTRA_VALUE) {
-      value = row.value;
-    } else if (row.key === EXTRA_SOURCE) {
-      source = row.value;
-    }
-  }
+  if (crm.stage && STAGES.includes(crm.stage)) stage = crm.stage;
+  if (crm.tag && TAGS.includes(crm.tag)) tag = crm.tag;
+  if (crm.source) source = String(crm.source);
   return { stage, tag, value, source };
 }
 
-// Strip crm.* rows so they aren't shown as user-visible "extra" fields.
+// Strip crm.* from metadata so they aren't shown as user-visible "extra" fields.
 function userExtras(extra: ExtraRow[]): ExtraRow[] {
   return extra.filter((r) => !CRM_EXTRA_KEYS.has(r.key));
 }
@@ -312,18 +444,43 @@ function userExtras(extra: ExtraRow[]): ExtraRow[] {
 function normalizeContact(raw: any): CRMContact {
   const base = emptyContact();
   if (!raw || typeof raw !== "object") return base;
+  const meta = raw.metadata && typeof raw.metadata === "object" ? raw.metadata : {};
+  const pipeline = extractPipeline(meta);
   const extra: ExtraRow[] = Array.isArray(raw.extra) ? raw.extra : [];
-  const pipeline = extractPipeline(extra);
   return {
     ...base,
     ...raw,
+    // Core DB fields
+    full_name: raw.full_name ?? null,
+    email: raw.email ?? null,
+    phone: raw.phone ?? null,
+    avatar_url: raw.avatar_url ?? null,
+    company: raw.company ?? null,
+    job_title: raw.job_title ?? null,
+    linkedin_url: raw.linkedin_url ?? null,
     tags: Array.isArray(raw.tags) ? raw.tags : [],
-    phones: Array.isArray(raw.phones) ? raw.phones : [],
-    emails: Array.isArray(raw.emails) ? raw.emails : [],
-    websites: Array.isArray(raw.websites) ? raw.websites : [],
-    socials: Array.isArray(raw.socials) ? raw.socials : [],
-    messaging: Array.isArray(raw.messaging) ? raw.messaging : [],
+    metadata: meta,
+    created_at: raw.created_at ?? null,
+    updated_at: raw.updated_at ?? null,
+    // Derived from metadata
+    first_name: meta.first_name ?? null,
+    last_name: meta.last_name ?? null,
+    address: meta.address ?? null,
+    city: meta.city ?? null,
+    state: meta.state ?? null,
+    zip: meta.zip ?? null,
+    birthday: meta.birthday ?? null,
+    notes: meta.notes ?? null,
+    image_upload: meta.image_upload ?? raw.avatar_url ?? null,
+    color: meta.color ?? null,
+    last_touch: meta.last_touch ?? null,
+    phones: Array.isArray(meta.phones) ? meta.phones : [],
+    emails: Array.isArray(meta.emails) ? meta.emails : [],
+    websites: Array.isArray(meta.websites) ? meta.websites : [],
+    socials: Array.isArray(meta.socials) ? meta.socials : [],
+    messaging: Array.isArray(meta.messaging) ? meta.messaging : [],
     extra,
+    // Pipeline fields
     stage: pipeline.stage,
     tag: pipeline.tag,
     value: pipeline.value,
@@ -520,7 +677,7 @@ function contactToCsvRow(c: CRMContact): string {
   const extra = userExtras(c.extra)
     .map((e) => `${e.key}:${e.value}`)
     .join("|");
-  const tags = c.tags.join("|");
+  const tags = (c.tags || []).join("|");
   return [
     c.id,
     c.first_name || "",
@@ -559,7 +716,7 @@ function contactToCsvRow(c: CRMContact): string {
 // Main panel
 // ---------------------------------------------------------------------------
 
-export default function CRMPanel(): JSX.Element {
+export default function CRMPanel(): React.JSX.Element {
   const userEmail = useUserEmail();
 
   // Toast bus wiring
@@ -674,7 +831,7 @@ export default function CRMPanel(): JSX.Element {
       }
 
       const range = { from: page * limit, to: (page + 1) * limit - 1 };
-      const { data, count, error: sbError } = await query.range(range);
+      const { data, count, error: sbError } = await query.range(range.from, range.to);
 
       if (sbError) throw sbError;
 
@@ -695,7 +852,7 @@ export default function CRMPanel(): JSX.Element {
         listAbortRef.current = null;
       }
     }
-  }, [limit, page, searchDebounced, sortKey]);
+  }, [limit, page, searchDebounced]);
 
   useEffect(() => {
     fetchList();
@@ -807,41 +964,49 @@ export default function CRMPanel(): JSX.Element {
     if (!editing) return;
     setSaving(true);
     try {
-      const scalar: Record<string, any> = {
+      // Build metadata object with all nested/derived fields
+      const metadata: Record<string, any> = {
         first_name: editing.first_name || "",
         last_name: editing.last_name || "",
-        full_name: editing.full_name || "",
-        company: editing.company || "",
-        job_title: editing.job_title || "",
         address: editing.address || "",
         city: editing.city || "",
         state: editing.state || "",
         zip: editing.zip || "",
         birthday: editing.birthday || null,
         notes: editing.notes || "",
-        image_upload: editing.image_upload || null,
-        tags: editing.tags || [],
+        image_upload: editing.image_upload || editing.avatar_url || null,
         color: editing.color || null,
         last_touch: editing.last_touch || null,
+        phones: editing.phones || [],
+        emails: editing.emails || [],
+        websites: editing.websites || [],
+        socials: editing.socials || [],
+        messaging: editing.messaging || [],
+        extra: editing.extra || [],
+        // Pipeline fields under crm.*
+        crm: {
+          stage: editing.stage,
+          tag: editing.tag,
+          value: editing.value,
+          source: editing.source,
+        },
       };
 
-      // Flatten child arrays to columns
-      editing.phones.forEach((p, i) => {
-        scalar[`phone${i + 1}`] = p.value;
-      });
-      editing.emails.forEach((e, i) => {
-        scalar[`email${i + 1}`] = e.value;
-      });
-      editing.websites.forEach((w, i) => {
-        scalar[`website${i + 1}`] = w.value;
-      });
-
-      // Socials and Messaging are stored as JSONB in the migration
-      scalar.socials = editing.socials.map(s => ({ platform: s.platform, value: s.value }));
-      scalar.messaging = editing.messaging.map(m => ({ value: m.value }));
-      scalar.extra = editing.extra.map(e => ({ key: e.key, value: e.value }));
+      // Only write columns that exist in the actual DB schema
+      const scalar: Record<string, any> = {
+        full_name: editing.full_name || "",
+        email: editing.email || editing.emails[0]?.value || "",
+        phone: editing.phone || editing.phones[0]?.value || "",
+        avatar_url: editing.avatar_url || editing.image_upload || null,
+        company: editing.company || "",
+        job_title: editing.job_title || "",
+        linkedin_url: editing.linkedin_url || "",
+        tags: editing.tags || [],
+        metadata,
+      };
 
       let contactId = editing.id;
+
       if (creating) {
         const { data, error: sbError } = await supabase
           .from("contacts")
@@ -881,7 +1046,7 @@ export default function CRMPanel(): JSX.Element {
     // For other buckets, diff by id.
     if (bucket === "extra") {
       for (const c of clientRows) {
-        await lifeosApi.post(
+        await (lifeosApi as any).post(
           `/api/contacts/${encodeURIComponent(contactId)}/extra`,
           toPayload(c),
         );
@@ -891,7 +1056,7 @@ export default function CRMPanel(): JSX.Element {
       for (const s of serverRows) {
         const key = (s as any).key;
         if (!desiredKeys.has(key)) {
-          await lifeosApi.delete(
+          await (lifeosApi as any).delete(
             `/api/contacts/${encodeURIComponent(contactId)}/extra/${encodeURIComponent(s.id)}`,
           );
         }
@@ -904,7 +1069,7 @@ export default function CRMPanel(): JSX.Element {
 
     for (const s of serverRows) {
       if (!clientById.has(s.id)) {
-        await lifeosApi.delete(
+        await (lifeosApi as any).delete(
           `/api/contacts/${encodeURIComponent(contactId)}/${bucket}/${encodeURIComponent(s.id)}`,
         );
       }
@@ -913,13 +1078,13 @@ export default function CRMPanel(): JSX.Element {
       if (c.id && serverById.has(c.id)) {
         const prev = serverById.get(c.id)!;
         if (JSON.stringify(prev) !== JSON.stringify(c)) {
-          await lifeosApi.patch(
+          await (lifeosApi as any).patch(
             `/api/contacts/${encodeURIComponent(contactId)}/${bucket}/${encodeURIComponent(c.id)}`,
             toPayload(c),
           );
         }
       } else {
-        await lifeosApi.post(
+        await (lifeosApi as any).post(
           `/api/contacts/${encodeURIComponent(contactId)}/${bucket}`,
           toPayload(c),
         );
@@ -1038,7 +1203,7 @@ export default function CRMPanel(): JSX.Element {
           }
 
           // POST creates parent + child rows on the Worker.
-          const created = await lifeosApi.post("/api/contacts", {
+          const created = await (lifeosApi as any).post("/api/contacts", {
             first_name: fn,
             last_name: ln,
             full_name: name,
@@ -1063,13 +1228,13 @@ export default function CRMPanel(): JSX.Element {
           }
 
           if (email) {
-            await lifeosApi.post(`/api/contacts/${encodeURIComponent(newId)}/emails`, {
+            await (lifeosApi as any).post(`/api/contacts/${encodeURIComponent(newId)}/emails`, {
               value: email,
               position: 0,
             });
           }
           if (phone) {
-            await lifeosApi.post(`/api/contacts/${encodeURIComponent(newId)}/phones`, {
+            await (lifeosApi as any).post(`/api/contacts/${encodeURIComponent(newId)}/phones`, {
               value: onlyDigits(phone),
               label: null,
               position: 0,
@@ -1077,22 +1242,22 @@ export default function CRMPanel(): JSX.Element {
           }
 
           // Pipeline defaults
-          await lifeosApi.post(`/api/contacts/${encodeURIComponent(newId)}/extra`, {
+          await (lifeosApi as any).post(`/api/contacts/${encodeURIComponent(newId)}/extra`, {
             key: EXTRA_STAGE,
             value: STAGES.includes(row.stage as Stage) ? (row.stage as Stage) : "Lead",
           });
-          await lifeosApi.post(`/api/contacts/${encodeURIComponent(newId)}/extra`, {
+          await (lifeosApi as any).post(`/api/contacts/${encodeURIComponent(newId)}/extra`, {
             key: EXTRA_TAG,
             value: TAGS.includes(row.tag as Tag) ? (row.tag as Tag) : "New",
           });
           if (row.value) {
-            await lifeosApi.post(`/api/contacts/${encodeURIComponent(newId)}/extra`, {
+            await (lifeosApi as any).post(`/api/contacts/${encodeURIComponent(newId)}/extra`, {
               key: EXTRA_VALUE,
               value: String(row.value),
             });
           }
           if (row.source) {
-            await lifeosApi.post(`/api/contacts/${encodeURIComponent(newId)}/extra`, {
+            await (lifeosApi as any).post(`/api/contacts/${encodeURIComponent(newId)}/extra`, {
               key: EXTRA_SOURCE,
               value: String(row.source),
             });
@@ -1136,7 +1301,7 @@ export default function CRMPanel(): JSX.Element {
       try {
         const form = new FormData();
         form.append("file", file);
-        const res = await lifeosApi.post("/api/upload?type=contacts", form, {
+        const res = await (lifeosApi as any).post("/api/upload?type=contacts", form, {
           headers: { "Content-Type": "multipart/form-data" },
         });
         const data = res?.data ?? res;
@@ -1166,38 +1331,27 @@ export default function CRMPanel(): JSX.Element {
     setEnrichResult(null);
     try {
       const res = await invokeLLM({
-        route: "/api/enrich/contact",
-        payload: {
-          contact: {
-            id: editing.id,
-            first_name: editing.first_name,
-            last_name: editing.last_name,
-            full_name: editing.full_name,
-            company: editing.company,
-            job_title: editing.job_title,
-            city: editing.city,
-            state: editing.state,
-            notes: editing.notes,
-            socials: editing.socials,
-            websites: editing.websites,
-          },
-        },
+        prompt: `Enrich this contact: ${displayName(editing)}.
+        Company: ${editing.company}
+        Job Title: ${editing.job_title}
+        City: ${editing.city}
+        State: ${editing.state}
+        Notes: ${editing.notes}
+        Socials: ${JSON.stringify(editing.socials)}
+        Websites: ${JSON.stringify(editing.websites)}`,
       });
-      const data = res?.data ?? res;
+      const data = res;
       const summary: string =
-        typeof data?.summary === "string"
-          ? data.summary
-          : typeof data?.text === "string"
-            ? data.text
-            : typeof data?.content === "string"
-              ? data.content
-              : "";
+        typeof data?.text === "string"
+          ? data.text
+          : typeof data?.content === "string"
+            ? data.content
+            : "";
       if (!summary) throw new Error("Enrich returned no summary");
       setEnrichResult({
         summary,
-        source: data?.source === "llm+web" ? "llm+web" : "llm",
-        web_results_used:
-          typeof data?.web_results_used === "number" ? data.web_results_used : 0,
+        source: "llm",
+        web_results_used: 0,
       });
       toast("success", "Enrichment ready");
     } catch (e: any) {
@@ -1240,9 +1394,7 @@ export default function CRMPanel(): JSX.Element {
               ? out.text
               : typeof out?.content === "string"
                 ? out.content
-                : typeof out?.data?.text === "string"
-                  ? out.data.text
-                  : JSON.stringify(out);
+                : JSON.stringify(out);
         setAiResult(text);
       } catch (e: any) {
         const msg = e?.response?.data?.error || e?.message || "AI action failed";
@@ -1358,7 +1510,11 @@ export default function CRMPanel(): JSX.Element {
   // -------------------------------------------------------------------------
 
   return (
-    <PanelLayout title="CRM" subtitle="Pipeline & deal management (Path B)">
+    <PanelLayout
+      title="CRM"
+      subtitle="Pipeline & deal management (Path B)"
+      icon={<Table2 size={18} />}
+    >
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       {/* SECTION: toolbar */}

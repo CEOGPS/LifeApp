@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { PlayCircle, Search, X, Monitor, Volume2, VolumeX, ChevronLeft } from "lucide-react";
 
 interface YouTubeContextValue {
@@ -46,8 +46,11 @@ function extractVideoId(url: string): string | null {
 // Get API key from environment
 function getYouTubeApiKey(): string | null {
   // Vite exposes env vars on import.meta.env
-  if (typeof import.meta !== "undefined" && import.meta.env?.VITE_YOUTUBE_API_KEY) {
-    return import.meta.env.VITE_YOUTUBE_API_KEY;
+  const env = (import.meta as ImportMeta & {
+    env?: { VITE_YOUTUBE_API_KEY?: string };
+  }).env;
+  if (env?.VITE_YOUTUBE_API_KEY) {
+    return env.VITE_YOUTUBE_API_KEY;
   }
   return null;
 }

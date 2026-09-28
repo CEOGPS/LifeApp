@@ -2,7 +2,7 @@
 // The UI for controlling Erebus's personality, triggers, and initiation log
 
 import React, { useState } from "react";
-import {
+import type {
   InitiationState,
   Personality,
   TriggerSettings,
@@ -10,10 +10,8 @@ import {
   EmotionalState,
   InitiationLogEntry,
   InitiationMessage,
-  PRESENCE_COLORS,
-  EMOTION_EMOJIS,
-  EMOTION_DESCRIPTIONS,
 } from "../types/initiation.types";
+import { PRESENCE_COLORS, EMOTION_EMOJIS, EMOTION_DESCRIPTIONS } from "../types/initiation.types";
 
 const C = {
   bg: "#07080f",

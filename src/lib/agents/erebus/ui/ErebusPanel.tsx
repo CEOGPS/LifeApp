@@ -2,7 +2,6 @@
 // Fixes: silent errors, stale settings, memory leaks, IME, a11y, perf,
 //        blob-URL leaks, unstable send callback, unhandled rejections from
 //        runAgenticTask's new Promise contract, engine log spam
-// @ts-nocheck -- typing deferred
 import React, {
   useState,
   useRef,

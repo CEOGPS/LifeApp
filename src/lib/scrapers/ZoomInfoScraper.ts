@@ -1,4 +1,85 @@
 // lib/scrapers/ZoomInfoScraper.ts
+
+export interface CompanySearchRequest {
+  name?: string;
+  industry?: string;
+  revenue?: { min: number; max: number };
+  employeeCount?: { min: number; max: number };
+  location?: string;
+  limit?: number;
+}
+
+export interface PersonSearchRequest {
+  title?: string;
+  seniority?: string[];
+  company?: string;
+  industry?: string;
+  location?: string;
+  limit?: number;
+}
+
+export interface ZoomInfoCompany {
+  company_name: string;
+  company_domain: string;
+  industry: string;
+  revenue: number | string;
+  employees: number | string;
+  location: string;
+  linkedin_url: string;
+  source: string;
+}
+
+export interface ZoomInfoPerson {
+  first_name: string;
+  last_name: string;
+  email: string;
+  company: string;
+  job_title: string;
+  linkedin_url: string;
+  phone: string;
+  source: string;
+  enrichment: {
+    seniority: string;
+    departments: string[];
+    skills: string[];
+    education: string[];
+  };
+}
+
+export interface ZoomInfoEnrichedCompany {
+  name: string;
+  domain: string;
+  industry: string;
+  sub_industry: string;
+  revenue: number | string;
+  employees: number | string;
+  founded: number | string;
+  headquarters: string;
+  technologies: string[];
+  competitors: string[];
+  news: string[];
+}
+
+export interface ZoomInfoEnrichedContact {
+  first_name: string;
+  last_name: string;
+  email: string;
+  company: string;
+  job_title: string;
+  linkedin_url: string;
+  phone: string;
+  direct_dial: string;
+  mobile_phone: string;
+}
+
+export interface IntentData {
+  company: string;
+  domain: string;
+  intent_topics: string[];
+  intent_score: number;
+  decision_makers: any[];
+}
+
 export class ZoomInfoScraper {
   private apiKey: string;
   private baseUrl: string = "https://api.zoominfo.com/v2";
@@ -7,14 +88,7 @@ export class ZoomInfoScraper {
     this.apiKey = apiKey;
   }
 
-  async searchCompanies(params: {
-    name?: string;
-    industry?: string;
-    revenue?: { min: number; max: number };
-    employeeCount?: { min: number; max: number };
-    location?: string;
-    limit?: number;
-  }): Promise<any[]> {
+  async searchCompanies(params: CompanySearchRequest): Promise<ZoomInfoCompany[]> {
     const response = await fetch(`${this.baseUrl}/search/company`, {
       method: "POST",
       headers: {
@@ -30,6 +104,11 @@ export class ZoomInfoScraper {
         pageSize: params.limit || 100,
       }),
     });
+
+    if (!response.ok) {
+      console.error(`ZoomInfo searchCompanies error: ${response.status} ${response.statusText}`);
+      return [];
+    }
 
     const data = await response.json();
 
@@ -47,14 +126,7 @@ export class ZoomInfoScraper {
     );
   }
 
-  async searchPeople(params: {
-    title?: string;
-    seniority?: string[];
-    company?: string;
-    industry?: string;
-    location?: string;
-    limit?: number;
-  }): Promise<any[]> {
+  async searchPeople(params: PersonSearchRequest): Promise<ZoomInfoPerson[]> {
     const response = await fetch(`${this.baseUrl}/search/people`, {
       method: "POST",
       headers: {
@@ -71,6 +143,11 @@ export class ZoomInfoScraper {
       }),
     });
 
+    if (!response.ok) {
+      console.error(`ZoomInfo searchPeople error: ${response.status} ${response.statusText}`);
+      return [];
+    }
+
     const data = await response.json();
 
     return (
@@ -85,15 +162,15 @@ export class ZoomInfoScraper {
         source: "zoominfo",
         enrichment: {
           seniority: person.seniority,
-          departments: person.departments,
-          skills: person.skills,
-          education: person.education,
+          departments: person.departments || [],
+          skills: person.skills || [],
+          education: person.education || [],
         },
       })) || []
     );
   }
 
-  async enrichCompany(domain: string): Promise<any> {
+  async enrichCompany(domain: string): Promise<ZoomInfoEnrichedCompany | null> {
     const response = await fetch(`${this.baseUrl}/enrich/company`, {
       method: "POST",
       headers: {
@@ -102,6 +179,11 @@ export class ZoomInfoScraper {
       },
       body: JSON.stringify({ domain: domain }),
     });
+
+    if (!response.ok) {
+      console.error(`ZoomInfo enrichCompany error: ${response.status} ${response.statusText}`);
+      return null;
+    }
 
     const data = await response.json();
 
@@ -114,13 +196,13 @@ export class ZoomInfoScraper {
       employees: data.employeeCount,
       founded: data.foundedYear,
       headquarters: data.headquarters,
-      technologies: data.technologies,
-      competitors: data.competitors,
-      news: data.recentNews,
+      technologies: data.technologies || [],
+      competitors: data.competitors || [],
+      news: data.recentNews || [],
     };
   }
 
-  async enrichContact(email: string): Promise<any> {
+  async enrichContact(email: string): Promise<ZoomInfoEnrichedContact | null> {
     const response = await fetch(`${this.baseUrl}/enrich/contact`, {
       method: "POST",
       headers: {
@@ -129,6 +211,11 @@ export class ZoomInfoScraper {
       },
       body: JSON.stringify({ email: email }),
     });
+
+    if (!response.ok) {
+      console.error(`ZoomInfo enrichContact error: ${response.status} ${response.statusText}`);
+      return null;
+    }
 
     const data = await response.json();
 
@@ -152,8 +239,7 @@ export class ZoomInfoScraper {
     companySize?: { min: number; max: number };
     location?: string;
     listName: string;
-  }): Promise<{ contacts: any[]; total: number }> {
-    // Search for people matching criteria
+  }): Promise<{ contacts: ZoomInfoPerson[]; total: number }> {
     const people = await this.searchPeople({
       title: params.jobTitle,
       seniority: params.seniority,
@@ -162,7 +248,6 @@ export class ZoomInfoScraper {
       limit: 500,
     });
 
-    // Filter by company size if specified
     let filteredContacts = people;
     if (params.companySize) {
       const companies = await Promise.all(
@@ -171,6 +256,7 @@ export class ZoomInfoScraper {
 
       filteredContacts = people.filter((_, i) => {
         const size = companies[i]?.employees;
+        if (typeof size !== "number") return false;
         return (
           size >= params.companySize!.min && size <= params.companySize!.max
         );
@@ -185,14 +271,14 @@ export class ZoomInfoScraper {
 
   async getCompanyTechnologies(domain: string): Promise<string[]> {
     const company = await this.enrichCompany(domain);
-    return company.technologies || [];
+    return company?.technologies || [];
   }
 
   async findIntentData(params: {
     topics: string[];
     timeframe?: string;
     limit?: number;
-  }): Promise<any[]> {
+  }): Promise<IntentData[]> {
     const response = await fetch(`${this.baseUrl}/intent`, {
       method: "POST",
       headers: {
@@ -206,6 +292,11 @@ export class ZoomInfoScraper {
       }),
     });
 
+    if (!response.ok) {
+      console.error(`ZoomInfo findIntentData error: ${response.status} ${response.statusText}`);
+      return [];
+    }
+
     const data = await response.json();
 
     return (
@@ -214,7 +305,7 @@ export class ZoomInfoScraper {
         domain: company.domain,
         intent_topics: company.intentTopics,
         intent_score: company.intentScore,
-        decision_makers: company.keyContacts,
+        decision_makers: company.keyContacts || [],
       })) || []
     );
   }

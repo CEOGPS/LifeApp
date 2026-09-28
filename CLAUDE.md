@@ -1,4 +1,4 @@
-# LifeOS1 — Claude Code Project Rules
+# LifeOS1 — Copilot CLI Project Rules
 
 You are working on **LifeOS1**, a personal/business operating system. This
 file is authoritative. Read it before every session. When in doubt, ask

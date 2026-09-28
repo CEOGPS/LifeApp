@@ -4,17 +4,126 @@
 // Two lists (queue/backlog) are a `list` column, not two stores.
 // `source` is real ingestion provenance; null for manual tasks.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import {
   ListChecks, Plus, AlertCircle, CheckCircle, Info, Trash2, Loader2,
   Sparkles, Copy, X, ChevronUp, ChevronDown, ArrowRight, ArrowLeft,
   Download, Play, Pause, GripVertical, Check, Pencil, RefreshCw,
 } from "lucide-react";
-import PanelLayout from "@/components/layout/PanelLayout";
-import { usePersistentState } from "@/lib/usePersistentState";
-import { lifeosApi } from "@/lib/lifeosApi";
-import { invokeLLM } from "@/lib/invokeLLM";
-import { useUserEmail } from "@/hooks/useUserEmail";
+interface LLMResponse {
+  text?: string;
+  content?: string;
+}
+
+async function invokeLLM(options: { prompt: string; signal?: AbortSignal }): Promise<LLMResponse> {
+  const response = await fetch("/api/llm", {
+    method: "POST",
+    signal: options.signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: options.prompt }),
+  });
+
+  if (!response.ok) {
+    let message = `LLM request failed (${response.status})`;
+    try {
+      const body = await response.json();
+      if (typeof body?.error === "string") message = body.error;
+      else if (typeof body?.message === "string") message = body.message;
+    } catch {
+      // Keep the HTTP status when the response is not JSON.
+    }
+    throw new Error(message);
+  }
+
+  return response.json() as Promise<LLMResponse>;
+}
+
+function useUserEmail(): { email: string } {
+  const [email, setEmail] = useState("");
+
+  useEffect(() => {
+    try {
+      const storedEmail = window.localStorage.getItem("lifeos_user_email");
+      if (storedEmail) setEmail(storedEmail);
+    } catch {
+      // User email is optional.
+    }
+  }, []);
+
+  return { email };
+}
+
+function usePersistentState<T>(key: string, initialValue: T): [T, Dispatch<SetStateAction<T>>] {
+  const [value, setValue] = useState<T>(() => {
+    if (typeof window === "undefined") return initialValue;
+    try {
+      const stored = window.localStorage.getItem(key);
+      return stored === null ? initialValue : (JSON.parse(stored) as T);
+    } catch {
+      return initialValue;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      // Persistence is best effort.
+    }
+  }, [key, value]);
+
+  return [value, setValue];
+}
+
+/** Local API client kept here so this panel does not depend on a missing alias module. */
+async function lifeosApi<T = unknown>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers || {}),
+    },
+  });
+
+  if (!response.ok) {
+    let message = `Request failed (${response.status})`;
+    try {
+      const body = await response.json();
+      if (typeof body?.error === "string") message = body.error;
+      else if (typeof body?.message === "string") message = body.message;
+    } catch {
+      // Keep the HTTP status when the response is not JSON.
+    }
+    throw new Error(message);
+  }
+
+  if (response.status === 204) return undefined as T;
+  return response.json() as Promise<T>;
+}
+
+interface PanelLayoutProps {
+  title: string;
+  subtitle?: string;
+  icon?: ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
+}
+
+function PanelLayout({ title, subtitle, icon, actions, children }: PanelLayoutProps) {
+  return (
+    <section className="h-full flex flex-col min-h-0">
+      <header className="flex items-center gap-3 px-1 pb-3 shrink-0">
+        {icon && <div className="text-primary shrink-0">{icon}</div>}
+        <div className="min-w-0">
+          <h1 className="text-sm font-display tracking-wider text-white/90">{title}</h1>
+          {subtitle && <p className="text-[10px] text-white/40 mt-0.5">{subtitle}</p>}
+        </div>
+        {actions && <div className="ml-auto">{actions}</div>}
+      </header>
+      <div className="flex-1 min-h-0">{children}</div>
+    </section>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -233,13 +342,13 @@ export default function TaskPanel() {
       const position = listTasks.length ? Math.max(...listTasks.map((t) => t.position)) + 1 : 0;
       await lifeosApi("/api/tasks", {
         method: "POST",
-        body: {
+        body: JSON.stringify({
           title: newTitle.trim(),
           module: newModule,
           priority: newPriority,
           list: newList,
           position,
-        },
+        }),
       });
       setNewTitle("");
       pushToast("success", "Task added");
@@ -253,7 +362,7 @@ export default function TaskPanel() {
 
   const toggleDone = useCallback(async (t: Task) => {
     try {
-      await lifeosApi(`/api/tasks/${t.id}`, { method: "PATCH", body: { done: !t.done } });
+      await lifeosApi(`/api/tasks/${t.id}`, { method: "PATCH", body: JSON.stringify({ done: !t.done }) });
       await loadAll();
     } catch (e: any) {
       pushToast("error", e?.message || "Failed to update task");
@@ -264,7 +373,7 @@ export default function TaskPanel() {
     const title = editTitle.trim();
     if (!title) { setEditingId(null); return; }
     try {
-      await lifeosApi(`/api/tasks/${id}`, { method: "PATCH", body: { title } });
+      await lifeosApi(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify({ title }) });
       setEditingId(null);
       setEditTitle("");
       await loadAll();
@@ -298,7 +407,7 @@ export default function TaskPanel() {
     try {
       await lifeosApi("/api/tasks/reorder", {
         method: "POST",
-        body: { list, ordered_ids: orderedIds },
+        body: JSON.stringify({ list, ordered_ids: orderedIds }),
       });
       await loadAll();
     } catch (e: any) {
@@ -321,7 +430,7 @@ export default function TaskPanel() {
     const targetList = to === "queue" ? queue : backlog;
     const position = targetList.length ? Math.max(...targetList.map((x) => x.position)) + 1 : 0;
     try {
-      await lifeosApi(`/api/tasks/${t.id}`, { method: "PATCH", body: { list: to, position } });
+      await lifeosApi(`/api/tasks/${t.id}`, { method: "PATCH", body: JSON.stringify({ list: to, position }) });
       pushToast("success", `Moved to ${to}`);
       await loadAll();
     } catch (e: any) {
@@ -435,7 +544,7 @@ export default function TaskPanel() {
       for (const s of suggestions) {
         await lifeosApi("/api/tasks", {
           method: "POST",
-          body: { title: s.title, module: s.module, priority: s.priority, list: "queue" },
+          body: JSON.stringify({ title: s.title, module: s.module, priority: s.priority, list: "queue" }),
         });
       }
       pushToast("success", `Added ${suggestions.length} suggested tasks`);

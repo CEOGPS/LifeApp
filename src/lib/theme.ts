@@ -115,9 +115,9 @@ export function getActiveTheme() {
  * @param {string} id - The theme ID to apply
  * @returns {string} The applied theme ID
  */
-export function applyTheme(id) {
+export function applyTheme(id: string) {
   // Validate theme exists
-  const theme = THEMES[id];
+  const theme = THEMES[id as keyof typeof THEMES];
   if (!theme) {
     console.warn(`[Theme] Theme "${id}" not found, falling back to default`);
     return applyTheme(DEFAULT_THEME);
@@ -179,8 +179,8 @@ export function getThemeList() {
  * @param {string} id - The theme ID
  * @returns {Object|null} The theme object or null if not found
  */
-export function getTheme(id) {
-  return THEMES[id] || null;
+export function getTheme(id: string) {
+  return THEMES[id as keyof typeof THEMES] || null;
 }
 
 /**
@@ -200,8 +200,8 @@ export function getCurrentThemeId() {
  * @param {string} id - The theme ID to check
  * @returns {boolean} Whether the theme exists
  */
-export function isValidTheme(id) {
-  return !!THEMES[id];
+export function isValidTheme(id: string) {
+  return !!THEMES[id as keyof typeof THEMES];
 }
 
 /**
@@ -217,8 +217,8 @@ export function resetTheme() {
  * @param {string} id - The theme ID
  * @returns {Object|null} The theme tokens or null if not found
  */
-export function getThemeTokens(id) {
-  const theme = THEMES[id];
+export function getThemeTokens(id: string) {
+  const theme = THEMES[id as keyof typeof THEMES];
   return theme ? theme.tokens : null;
 }
 
@@ -227,17 +227,17 @@ export function getThemeTokens(id) {
  * @param {Function} callback - Function called when theme changes
  * @returns {Function} Cleanup function
  */
-export function onThemeChange(callback) {
-  const handler = (event) => {
+export function onThemeChange(callback: (themeId: string, themeName: string) => void) {
+  const handler = (event: CustomEvent) => {
     if (event.detail) {
       callback(event.detail.themeId, event.detail.themeName);
     }
   };
 
-  window.addEventListener("themeChanged", handler);
+  window.addEventListener("themeChanged", handler as EventListener);
 
   return () => {
-    window.removeEventListener("themeChanged", handler);
+    window.removeEventListener("themeChanged", handler as EventListener);
   };
 }
 
@@ -254,7 +254,7 @@ export const COLORS = {
 };
 
 // Helper to create color variants with transparency
-export function colorWithOpacity(color, opacity) {
+export function colorWithOpacity(color: string, opacity: number) {
   return `rgba(${color}, ${opacity})`;
 }
 

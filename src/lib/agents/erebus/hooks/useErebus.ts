@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { InitiationEngine } from "../initiation/InitiationEngine";
-import { InitiationState, InitiationMessage } from "../types/initiation.types";
+import type { InitiationState, InitiationMessage } from "../types/initiation.types";
 
 export function useErebus() {
   // Store engine in ref — stable across renders

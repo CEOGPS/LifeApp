@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Plus, ExternalLink, Trash2, Link2 } from "lucide-react";
-import { usePersistentState } from "@/lib/usePersistentState.ts";
+import { usePersistentState } from "@/lib/usePersistentState";
 
 type QuickLink = { id: string; label: string; url: string; icon?: string };
 
@@ -9,10 +9,10 @@ export default function QuickLinks() {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ label: "", url: "" });
 
-  const add = () => {
+  const add = async () => {
     if (!form.label || !form.url) return;
     const url = form.url.startsWith("http") ? form.url : `https://${form.url}`;
-    setLinks((l) => [
+    await setLinks((l) => [
       ...l,
       { id: Date.now().toString(), label: form.label, url },
     ]);
@@ -20,7 +20,7 @@ export default function QuickLinks() {
     setAdding(false);
   };
 
-  const del = (id: string) => setLinks((l) => l.filter((x) => x.id !== id));
+  const del = async (id: string) => await setLinks((l) => l.filter((x) => x.id !== id));
 
   return (
     <div className="flex flex-col gap-3 h-full">

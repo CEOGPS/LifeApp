@@ -1,5 +1,3 @@
-// @ts-nocheck -- deep agent logic; typing deferred
-// ============================================================
 // ErebusCore.ts — Autonomous Intelligence Engine
 //
 // Fixes in this revision:
@@ -18,15 +16,16 @@
 // WORKER  = Cloudflare Worker (llm invoke, browse, media proxies)
 // BACKEND = Python agentic server (stream, task, chat, wake, sync)
 // They are DIFFERENT by default. Override either via env.
+const env = (import.meta as ImportMeta & { env?: Record<string, any> }).env;
 const WORKER =
-  import.meta.env?.VITE_WORKER_URL ?? "https://lifeos1-api.ceogps.workers.dev";
+  env?.VITE_WORKER_URL ?? "https://lifeos1-api.ceogps.workers.dev";
 const BACKEND =
-  import.meta.env?.VITE_EREBUS_BACKEND_URL ??
-  (import.meta.env?.DEV ? "http://localhost:8000" : WORKER);
+  env?.VITE_EREBUS_BACKEND_URL ??
+  (env?.DEV ? "http://localhost:8000" : WORKER);
 const BROWSER_AGENT =
-  import.meta.env?.VITE_EREBUS_BROWSER_AGENT_URL ?? "http://localhost:8100";
+  env?.VITE_EREBUS_BROWSER_AGENT_URL ?? "http://localhost:8100";
 const OLLAMA =
-  import.meta.env?.VITE_EREBUS_OLLAMA_URL ?? "http://localhost:11434";
+  env?.VITE_EREBUS_OLLAMA_URL ?? "http://localhost:11434";
 
 // ── AbortSignal.timeout fallback (Safari < 16.4) ─────────────────────────────
 function signalTimeout(ms: number): AbortSignal {
@@ -95,6 +94,25 @@ export const ER_PREFIX = "lifeos_er_";
 
 // ── ErebusCore ───────────────────────────────────────────────────────────────
 class ErebusCore {
+  shortTerm: any[];
+  longTerm: any;
+  goals: any[];
+  leads: any[];
+  soul: any;
+  instructions: any[];
+  skills: any[];
+  actionLog: Array<{ action: string; detail: string; time: string }>;
+  projects: any[];
+  paused: boolean;
+  model: string;
+  ollamaModel: string;
+  settings: any;
+  wakeState: "dormant" | "waking" | "active" | "working";
+  backendOnline: boolean;
+  ollamaOnline: boolean;
+  ollamaModels: string[];
+  _sysPromptCache: string | null;
+
   constructor() {
     this.shortTerm = lsLoad(ER_PREFIX + "short", []);
     this.longTerm = lsLoad(ER_PREFIX + "lt", {
@@ -281,7 +299,10 @@ class ErebusCore {
         signal: signalTimeout(5000),
       });
     } catch (e) {
-      this.log("sync_error", String(e?.message || e).slice(0, 80));
+      this.log(
+        "sync_error",
+        String((e as Error)?.message || e).slice(0, 80),
+      );
     }
   }
 
@@ -452,7 +473,9 @@ RULES:
     }));
     const messages = [...history, { role: "user", content: msg }];
     const model = this.model || "auto";
-    const ENV = import.meta.env || {};
+    const ENV = (import.meta as ImportMeta & {
+      env?: Record<string, string | undefined>;
+    }).env || {};
 
     // 1. Python backend (full agentic power)
     if (this.backendOnline) {
@@ -659,7 +682,7 @@ RULES:
       this.log("reason", `worker:${data.model_used || model}`);
       return { response: text, model: data.model_used || model };
     } catch (e) {
-      this.log("error", e.message);
+      this.log("error", e instanceof Error ? e.message : String(e));
       return {
         response: `I couldn't reach any AI provider.\n\nTo fix: add VITE_GROQ_API_KEY or VITE_GEMINI_API_KEY to .env.local and restart the dev server. Groq is free at console.groq.com.`,
       };
@@ -711,12 +734,12 @@ RULES:
     this._invalidateSystemPrompt();
   }
   saveInstructions(arr: unknown) {
-    this.instructions = arr;
+    this.instructions = Array.isArray(arr) ? arr : [];
     lsSaveNow(ER_PREFIX + "instr", arr);
     this._invalidateSystemPrompt();
   }
   saveSkills(arr: unknown) {
-    this.skills = arr;
+    this.skills = Array.isArray(arr) ? arr : [];
     lsSaveNow(ER_PREFIX + "skills", arr);
     this._invalidateSystemPrompt();
   }
@@ -805,7 +828,7 @@ RULES:
       p.id === projectId
         ? {
             ...p,
-            tasks: p.tasks.map((t) =>
+            tasks: p.tasks.map((t: { id: number; done: any; }) =>
               t.id === taskId ? { ...t, done: !t.done } : t,
             ),
           }

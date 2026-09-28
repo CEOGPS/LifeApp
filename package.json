@@ -7,7 +7,6 @@
   "license": "UNLICENSED",
   "type": "module",
   "main": "electron/main.js",
-
   "scripts": {
     "// ── Web (Vite) ─────────────────────────────────────────": "",
     "dev": "vite",
@@ -22,7 +21,6 @@
     "prettier-fix": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-
     "// ── Electron ───────────────────────────────────────────": "",
     "electron:dev": "concurrently -k -n VITE,ELECTRON -c cyan,magenta \"vite\" \"wait-on tcp:3000 && electron .\"",
     "electron:build": "pnpm build && electron-builder",
@@ -30,15 +28,14 @@
     "electron:build:mac": "pnpm build && electron-builder --mac",
     "electron:build:linux": "pnpm build && electron-builder --linux",
     "electron:preview": "pnpm build && electron .",
-
     "// ── Deploy ─────────────────────────────────────────────": "",
     "deploy:pages": "pnpm build && wrangler pages deploy dist --project-name=lifeos1",
     "deploy:worker": "wrangler deploy --config wrangler.toml",
     "deploy": "pnpm deploy:pages && pnpm deploy:worker"
   },
-
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
+    "@mediapipe/tasks-vision": "^1.0.1",
     "@mlc-ai/web-llm": "^0.2.85",
     "@supabase/supabase-js": "^2.45.0",
     "@tanstack/react-query": "^5.101.1",
@@ -77,7 +74,6 @@
     "zod": "^3.25.76",
     "zustand": "^5.0.2"
   },
-
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260822.1",
     "@edge-runtime/vm": "^5.0.0",
@@ -109,7 +105,6 @@
     "wait-on": "^8.0.1",
     "wrangler": "^4.35.0"
   },
-
   "build": {
     "appId": "com.ceogps.lifeos1",
     "productName": "LifeOS1",
@@ -128,19 +123,33 @@
     },
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "electron/build/icon.ico"
     },
     "mac": {
       "target": [
-        { "target": "dmg", "arch": ["arm64", "x64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
       ],
       "icon": "electron/build/icon.icns",
       "category": "public.app-category.productivity"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "icon": "electron/build/icon.png",
       "category": "Utility"
     },
@@ -151,7 +160,6 @@
       "createStartMenuShortcut": true
     }
   },
-
   "allowScripts": {
     "esbuild": true,
     "@swc/core": true,
@@ -162,7 +170,6 @@
     "electron": true,
     "electron-winstaller": true
   },
-
   "pnpm": {
     "onlyBuiltDependencies": [
       "@swc/core",
@@ -176,7 +183,6 @@
       "electron-winstaller"
     ]
   },
-
   "engines": {
     "node": ">=20.19.0",
     "pnpm": ">=9.0.0"

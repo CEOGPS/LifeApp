@@ -11,7 +11,7 @@ import React, {
   useState,
 } from "react";
 import { useUserEmail } from "../../hooks/useUserEmail";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../../lib/supabaseClient";
 
 function PanelLayout({
   title,
@@ -161,7 +161,7 @@ const SOCIAL_URL_BUILDERS: Record<SocialPlatform, (v: string) => string> = {
 };
 
 // ---------------------------------------------------------------------------
-// Types
+// Types (adapted to existing Supabase schema: flat contacts table + metadata JSONB)
 // ---------------------------------------------------------------------------
 
 interface PhoneRow {
@@ -196,13 +196,24 @@ interface ExtraRow {
   value: string;
 }
 
+// Matches the actual DB schema: flat contacts table with metadata JSONB for nested data
 interface Contact {
   id: string;
-  first_name: string | null;
-  last_name: string | null;
+  // Core fields from DB
   full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  avatar_url: string | null;
   company: string | null;
   job_title: string | null;
+  linkedin_url: string | null;
+  tags: string[] | null;
+  metadata: Record<string, any> | null;
+  created_at: string | null;
+  updated_at: string | null;
+  // Derived fields (from metadata)
+  first_name: string | null;
+  last_name: string | null;
   address: string | null;
   city: string | null;
   state: string | null;
@@ -210,11 +221,8 @@ interface Contact {
   birthday: string | null;
   notes: string | null;
   image_upload: string | null;
-  tags: string[] | null;
   color: string | null;
   last_touch: string | null;
-  created_at: string | null;
-  updated_at: string | null;
   phones: PhoneRow[];
   emails: EmailRow[];
   websites: WebsiteRow[];
@@ -383,23 +391,30 @@ function downloadCsv(filename: string, content: string): void {
 function emptyContact(): Contact {
   return {
     id: "",
-    first_name: "",
-    last_name: "",
+    // Core DB fields
     full_name: "",
+    email: null,
+    phone: null,
+    avatar_url: null,
     company: "",
     job_title: "",
-    address: "",
-    city: "",
-    state: "",
-    zip: "",
-    birthday: null,
-    notes: "",
-    image_upload: null,
+    linkedin_url: null,
     tags: [],
-    color: null,
-    last_touch: null,
+    metadata: {},
     created_at: null,
     updated_at: null,
+    // Derived from metadata
+    first_name: null,
+    last_name: null,
+    address: null,
+    city: null,
+    state: null,
+    zip: null,
+    birthday: null,
+    notes: null,
+    image_upload: null,
+    color: null,
+    last_touch: null,
     phones: [],
     emails: [],
     websites: [],
@@ -409,19 +424,61 @@ function emptyContact(): Contact {
   };
 }
 
+// Fix mojibake (UTF-8 interpreted as Latin-1) - common pattern: smart apostrophe (')
+function fixMojibake(s: string | null | undefined): string | null {
+  if (s === undefined) return null;
+  if (!s) return s;
+  // Common mojibake patterns: UTF-8 smart apostrophe (') = \xE2\x80\x99
+  // When interpreted as Latin-1: Ã¢â€šÂ¬Ã¢â€žÂ¢
+  return s
+    .replace(/ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢/g, "'")  // Scott's -> Scott's
+    .replace(/ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â¢/g, "'")
+    .replace(/ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€šÂ¬/g, "–")  // en-dash
+    .replace(/ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢/g, "—")  // em-dash
+    .replace(/ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡/g, "…")     // ellipsis
+    .replace(/ÃƒÂ¢Ã¢â€šÂ¬Ã¢Å“Â¢/g, "“")   // left double quote
+    .replace(/ÃƒÂ¢Ã¢â€šÂ¬Ã¢Å”Â¢/g, "”")   // right double quote
+    .replace(/ÃƒÂ¢Ã¢â€šÂ¬Ã¢Å¸Â¢/g, "‘")   // left single quote
+    .replace(/ÃƒÂ¢Ã¢â€šÂ¬Ã¢Å½Â¢/g, "’");  // right single quote
+}
+
 function normalizeContact(raw: any): Contact {
   const base = emptyContact();
   if (!raw || typeof raw !== "object") return base;
+  const meta = raw.metadata && typeof raw.metadata === "object" ? raw.metadata : {};
   return {
     ...base,
     ...raw,
+    // Core DB fields
+    full_name: fixMojibake(raw.full_name ?? null),
+    email: fixMojibake(raw.email ?? null),
+    phone: fixMojibake(raw.phone ?? null),
+    avatar_url: raw.avatar_url ?? null,
+    company: fixMojibake(raw.company ?? null),
+    job_title: fixMojibake(raw.job_title ?? null),
+    linkedin_url: raw.linkedin_url ?? null,
     tags: Array.isArray(raw.tags) ? raw.tags : [],
-    phones: Array.isArray(raw.phones) ? raw.phones : [],
-    emails: Array.isArray(raw.emails) ? raw.emails : [],
-    websites: Array.isArray(raw.websites) ? raw.websites : [],
-    socials: Array.isArray(raw.socials) ? raw.socials : [],
-    messaging: Array.isArray(raw.messaging) ? raw.messaging : [],
-    extra: Array.isArray(raw.extra) ? raw.extra : [],
+    metadata: meta,
+    created_at: raw.created_at ?? null,
+    updated_at: raw.updated_at ?? null,
+    // Derived from metadata
+    first_name: fixMojibake(meta.first_name ?? null),
+    last_name: fixMojibake(meta.last_name ?? null),
+    address: fixMojibake(meta.address ?? null),
+    city: fixMojibake(meta.city ?? null),
+    state: fixMojibake(meta.state ?? null),
+    zip: fixMojibake(meta.zip ?? null),
+    birthday: meta.birthday ?? null,
+    notes: fixMojibake(meta.notes ?? null),
+    image_upload: meta.image_upload ?? raw.avatar_url ?? null,
+    color: meta.color ?? null,
+    last_touch: meta.last_touch ?? null,
+    phones: Array.isArray(meta.phones) ? meta.phones : [],
+    emails: Array.isArray(meta.emails) ? meta.emails : [],
+    websites: Array.isArray(meta.websites) ? meta.websites : [],
+    socials: Array.isArray(meta.socials) ? meta.socials : [],
+    messaging: Array.isArray(meta.messaging) ? meta.messaging : [],
+    extra: Array.isArray(meta.extra) ? meta.extra : [],
   };
 }
 
@@ -603,7 +660,7 @@ export default function ContactsPanel(): React.ReactElement {
       }
 
       const range = { from: page * limit, to: (page + 1) * limit - 1 };
-      const { data, count, error: sbError } = await query.range(range);
+      const { data, count, error: sbError } = await query.range(range.from, range.to);
 
       if (sbError) throw sbError;
 
@@ -701,39 +758,39 @@ export default function ContactsPanel(): React.ReactElement {
     if (!editing) return;
     setSaving(true);
     try {
-      const scalar: Record<string, any> = {
+      // Build metadata object with all nested/derived fields
+      const metadata: Record<string, any> = {
         first_name: editing.first_name || "",
         last_name: editing.last_name || "",
-        full_name: editing.full_name || "",
-        company: editing.company || "",
-        job_title: editing.job_title || "",
         address: editing.address || "",
         city: editing.city || "",
         state: editing.state || "",
         zip: editing.zip || "",
         birthday: editing.birthday || null,
         notes: editing.notes || "",
-        image_upload: editing.image_upload || null,
-        tags: editing.tags || [],
+        image_upload: editing.image_upload || editing.avatar_url || null,
         color: editing.color || null,
         last_touch: editing.last_touch || null,
+        phones: editing.phones || [],
+        emails: editing.emails || [],
+        websites: editing.websites || [],
+        socials: editing.socials || [],
+        messaging: editing.messaging || [],
+        extra: editing.extra || [],
       };
 
-      // Flatten child arrays to columns
-      editing.phones.forEach((p, i) => {
-        scalar[`phone${i + 1}`] = p.value;
-      });
-      editing.emails.forEach((e, i) => {
-        scalar[`email${i + 1}`] = e.value;
-      });
-      editing.websites.forEach((w, i) => {
-        scalar[`website${i + 1}`] = w.value;
-      });
-
-      // Socials and Messaging are stored as JSONB in the migration
-      scalar.socials = editing.socials.map(s => ({ platform: s.platform, value: s.value }));
-      scalar.messaging = editing.messaging.map(m => ({ value: m.value }));
-      scalar.extra = editing.extra.map(e => ({ key: e.key, value: e.value }));
+      // Only write columns that exist in the actual DB schema
+      const scalar: Record<string, any> = {
+        full_name: editing.full_name || "",
+        email: editing.email || editing.emails[0]?.value || "",
+        phone: editing.phone || editing.phones[0]?.value || "",
+        avatar_url: editing.avatar_url || editing.image_upload || null,
+        company: editing.company || "",
+        job_title: editing.job_title || "",
+        linkedin_url: editing.linkedin_url || "",
+        tags: editing.tags || [],
+        metadata,
+      };
 
       let contactId = editing.id;
 

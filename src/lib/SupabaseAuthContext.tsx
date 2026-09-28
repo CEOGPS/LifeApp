@@ -2,7 +2,7 @@
 // Authentication context using Supabase
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabaseClient } from "./supabaseClient";
 
 interface User {
   id: string;
@@ -11,7 +11,7 @@ interface User {
   app_metadata?: Record<string, any>;
 }
 
-interface AuthError {
+export interface AuthError {
   message: string;
 }
 
@@ -39,38 +39,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setUser({
-          id: session.user.id,
-          email: session.user.email || "",
-          user_metadata: session.user.user_metadata,
-          app_metadata: session.user.app_metadata,
-        });
+    let mounted = true;
+
+    async function initAuth() {
+      try {
+        const supabase = await getSupabaseClient();
+        
+        // Get initial session
+        const { data: { session } } = await supabase.auth.getSession();
+        if (mounted && session?.user) {
+          setUser({
+            id: session.user.id,
+            email: session.user.email || "",
+            user_metadata: session.user.user_metadata,
+            app_metadata: session.user.app_metadata,
+          });
+        }
+      } catch (e) {
+        console.error("[Auth] Init error:", e);
+      } finally {
+        if (mounted) setLoading(false);
       }
-      setLoading(false);
-    });
+    }
+
+    initAuth();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        setUser({
-          id: session.user.id,
-          email: session.user.email || "",
-          user_metadata: session.user.user_metadata,
-          app_metadata: session.user.app_metadata,
-        });
-      } else {
-        setUser(null);
-      }
-      setLoading(false);
-    });
+    let subscription: { unsubscribe: () => void } | null = null;
+    (async () => {
+      const supabase = await getSupabaseClient();
+      const { data: { subscription: sub } } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (session?.user) {
+          setUser({
+            id: session.user.id,
+            email: session.user.email || "",
+            user_metadata: session.user.user_metadata,
+            app_metadata: session.user.app_metadata,
+          });
+        } else {
+          setUser(null);
+        }
+        setLoading(false);
+      });
+      subscription = sub;
+    })();
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription?.unsubscribe();
+    };
   }, []);
 
   const signInWithOAuth = useCallback(async (provider: "google" | "github" | "azure" | "slack" | "twitter" | "facebook" | "apple") => {
+    const supabase = await getSupabaseClient();
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
@@ -85,16 +106,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [signInWithOAuth]);
 
   const signInWithEmail = useCallback(async (email: string, password: string) => {
+    const supabase = await getSupabaseClient();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
   }, []);
 
   const signUpWithEmail = useCallback(async (email: string, password: string) => {
+    const supabase = await getSupabaseClient();
     const { error } = await supabase.auth.signUp({ email, password });
     if (error) throw error;
   }, []);
 
   const signOut = useCallback(async () => {
+    const supabase = await getSupabaseClient();
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
   }, []);
@@ -104,6 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [signOut]);
 
   const resetPassword = useCallback(async (email: string) => {
+    const supabase = await getSupabaseClient();
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/auth/reset-password`,
     });

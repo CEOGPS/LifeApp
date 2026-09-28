@@ -7,9 +7,40 @@ import {
   RefreshCw,
   Loader2,
 } from "lucide-react";
-import { usePersistentState } from "@/lib/usePersistentState.ts";
-import { useState } from "react";
-import { lifeosApi } from "@/lib/api.ts";
+import { useEffect, useState } from "react";
+
+const lifeosApi = {
+  async get<T>(url: string): Promise<T> {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Request failed: ${response.status}`);
+    }
+    return response.json() as Promise<T>;
+  },
+};
+
+function usePersistentState<T>(key: string, initialValue: T) {
+  const [value, setValue] = useState<T>(() => {
+    if (typeof window === "undefined") return initialValue;
+
+    try {
+      const stored = window.localStorage.getItem(key);
+      return stored === null ? initialValue : (JSON.parse(stored) as T);
+    } catch {
+      return initialValue;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      // Ignore unavailable or restricted browser storage.
+    }
+  }, [key, value]);
+
+  return [value, setValue] as const;
+}
 
 interface FinanceResponse {
   accounts?: Account[];

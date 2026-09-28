@@ -1,4 +1,3 @@
-// @ts-nocheck -- converted from .js; deep agent logic, typing deferred
 // ErebusLocalModel.ts — Browser-embedded local AI (WebLLM via WebGPU)
 //
 // Fixes in this revision:
@@ -12,13 +11,26 @@
 //   - isSupported() / dispose() exports for the UI
 // ============================================================
 
-let _engine = null;
-let _status = "idle"; // idle | loading | ready | error
+let _engine: any = null;
+let _status: "idle" | "loading" | "ready" | "error" = "idle"; // idle | loading | ready | error
 let _progress = 0;
 let _message = "";
-let _modelId = null;
-let _loadingPromise = null;
-const _listeners = new Set();
+let _modelId: string | null = null;
+let _loadingPromise: Promise<any> | null = null;
+
+interface LocalModelStatus {
+  status: "idle" | "loading" | "ready" | "error";
+  progress: number;
+  message: string;
+  model: string | null;
+}
+
+const _listeners = new Set<(snapshot: LocalModelStatus) => void>();
+
+function normalizeModelId(modelId: string | string[] | null): string | null {
+  if (Array.isArray(modelId)) return modelId.join(",");
+  return modelId ?? null;
+}
 
 // ── Capability probe ─────────────────────────────────────────────────────────
 
@@ -28,12 +40,12 @@ const _listeners = new Set();
  */
 export function isSupported() {
   if (typeof navigator === "undefined") return false;
-  return !!navigator.gpu;
+  return !!(navigator as any).gpu;
 }
 
 // ── Listener notification ────────────────────────────────────────────────────
 
-function _snapshot() {
+function _snapshot(): LocalModelStatus {
   return {
     status: _status,
     progress: _progress,
@@ -42,7 +54,7 @@ function _snapshot() {
   };
 }
 
-function _notify() {
+function _notify(): void {
   const snap = _snapshot();
   for (const fn of _listeners) {
     try {
@@ -58,8 +70,8 @@ function _notify() {
  * Fires once immediately with the current snapshot, then on every change.
  * Returns an unsubscribe function.
  */
-export function onLocalModelStatus(fn) {
-  if (typeof fn !== "function") return () => {};
+export function onLocalModelStatus(fn: (snapshot: LocalModelStatus) => void): () => boolean {
+  if (typeof fn !== "function") return () => false;
   _listeners.add(fn);
   try {
     fn(_snapshot());
@@ -126,9 +138,11 @@ export const LOCAL_MODELS = [
  *
  * @returns {Promise<object|null>} The engine instance, or null on failure.
  */
-export async function loadLocalModel(modelId) {
+export async function loadLocalModel(modelId: string | string[] | null) {
+  const normalizedModelId = normalizeModelId(modelId);
+
   // Same model already ready → return current engine.
-  if (_status === "ready" && _modelId === modelId && _engine) {
+  if (_status === "ready" && _modelId === normalizedModelId && _engine) {
     return _engine;
   }
 
@@ -140,7 +154,7 @@ export async function loadLocalModel(modelId) {
   // Capability gate.
   if (!isSupported()) {
     _status = "error";
-    _modelId = modelId;
+    _modelId = normalizedModelId;
     _progress = 0;
     _message =
       "WebGPU not available in this browser. Use Chrome or Edge 113+ (desktop).";
@@ -149,7 +163,7 @@ export async function loadLocalModel(modelId) {
   }
 
   // Switching models? Unload the current engine first so we don't leak VRAM.
-  if (_engine && _modelId !== modelId) {
+  if (_engine && _modelId !== normalizedModelId) {
     try {
       await unloadLocalModel();
     } catch {
@@ -158,18 +172,27 @@ export async function loadLocalModel(modelId) {
   }
 
   _status = "loading";
-  _modelId = modelId;
+  _modelId = normalizedModelId;
   _progress = 0;
   _message = "Initializing WebGPU…";
   _notify();
 
   // Capture this attempt so a stale resolution can't flip status later.
-  const attemptModelId = modelId;
+  const attemptModelId = normalizedModelId;
+
+  if (!attemptModelId) {
+    _status = "error";
+    _message = "No model selected.";
+    _progress = 0;
+    _notify();
+    _loadingPromise = null;
+    return null;
+  }
 
   _loadingPromise = (async () => {
     try {
       const { CreateMLCEngine } = await import("@mlc-ai/web-llm");
-      const engine = await CreateMLCEngine(modelId, {
+      const engine = await CreateMLCEngine(attemptModelId, {
         initProgressCallback: ({ progress, text }) => {
           // Ignore late callbacks from a superseded load attempt.
           if (_modelId !== attemptModelId) return;
@@ -200,7 +223,7 @@ export async function loadLocalModel(modelId) {
       _message = "Ready";
       _notify();
       return _engine;
-    } catch (e) {
+    } catch (e: any) {
       if (_modelId === attemptModelId) {
         _status = "error";
         _message =
@@ -253,7 +276,13 @@ export async function unloadLocalModel() {
 const MIN_TOKENS = 16;
 const MAX_TOKENS = 8192;
 
-function clampTokens(n) {
+type LocalChatMessage = {
+  role: string;
+  content?: string | null;
+  [key: string]: unknown;
+};
+
+function clampTokens(n: number): number {
   if (!Number.isFinite(n)) return 1200;
   return Math.max(MIN_TOKENS, Math.min(MAX_TOKENS, Math.floor(n)));
 }
@@ -262,7 +291,11 @@ function clampTokens(n) {
  * Single-turn chat against the loaded local model.
  * Returns the assistant text, or null if the engine isn't ready or the call fails.
  */
-export async function localModelChat(system, messages, maxTokens = 1200) {
+export async function localModelChat(
+  system: string,
+  messages: LocalChatMessage[],
+  maxTokens = 1200,
+): Promise<string | null> {
   if (!_engine || _status !== "ready") return null;
   try {
     const reply = await _engine.chat.completions.create({
@@ -281,11 +314,11 @@ export async function localModelChat(system, messages, maxTokens = 1200) {
 // text back when the stream ends. Errors yield null and stop iteration.
 
 export async function localModelChatStream(
-  system,
-  messages,
-  onDelta,
+  system: string,
+  messages: LocalChatMessage[],
+  onDelta?: (chunk: string) => void,
   maxTokens = 1200,
-) {
+): Promise<string | null> {
   if (!_engine || _status !== "ready") return null;
   let final = "";
   try {

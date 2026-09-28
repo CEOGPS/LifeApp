@@ -1,4 +1,20 @@
 // lib/scrapers/LinkedInScraper.ts
+
+interface ScrapedProfile {
+  first_name: string;
+  last_name: string;
+  email: string | undefined;
+  company: string | undefined;
+  job_title: string | undefined;
+  linkedin_url: string;
+  source: "linkedin";
+}
+
+interface SearchResult {
+  // Define search result structure
+  [key: string]: unknown;
+}
+
 export class LinkedInScraper {
   private apiKey: string;
 
@@ -6,7 +22,7 @@ export class LinkedInScraper {
     this.apiKey = apiKey;
   }
 
-  async scrapeProfile(profileUrl: string): Promise<any> {
+  async scrapeProfile(profileUrl: string): Promise<ScrapedProfile> {
     // Use ProxyCurl or similar LinkedIn API service
     const response = await fetch(
       "https://nubela.co/proxycurl/api/v2/linkedin",
@@ -36,9 +52,9 @@ export class LinkedInScraper {
     keyword: string,
     industry: string,
     limit: number = 100,
-  ): Promise<any[]> {
+  ): Promise<SearchResult[]> {
     // Implementation using LinkedIn Sales Navigator API
-    const results = [];
+    const results: SearchResult[] = [];
     // ... API calls
     return results;
   }

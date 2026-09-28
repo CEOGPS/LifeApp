@@ -25,7 +25,7 @@ export default function LeadsModule() {
       if (error) throw error;
 
       if (data) {
-        const normalized = data.map(c => ({
+        const normalized = data.map((c: any) => ({
           id: c.id,
           name: c.full_name,
           source: c.company || "Unknown",

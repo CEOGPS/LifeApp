@@ -1,8 +1,28 @@
 import React, { useState, useRef, useEffect } from "react";
-import { cn } from "@/lib/utils";
-import { MessageSquare, X, Mic, Send, Settings, Sparkles, Loader2, MessageSquareOff } from "lucide-react";
-import { useAuth } from "@/lib/SupabaseAuthContext";
-import { invokeLLM } from "@/lib/llm";
+import { X, Mic, Send, Settings, Sparkles, Loader2 } from "lucide-react";
+
+interface LLMResult {
+  ok: boolean;
+  text?: string;
+  content?: string;
+  detail?: string;
+  reason?: string;
+}
+
+const invokeLLM = async ({ prompt, systemPrompt }: { prompt: string; systemPrompt: string }): Promise<LLMResult> => {
+  const response = await fetch("/api/llm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, systemPrompt }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return { ok: false, detail: data.detail || data.reason || response.statusText };
+  }
+
+  return { ok: true, ...data };
+};
 
 interface ErebusMessage {
   id: string;
@@ -11,8 +31,10 @@ interface ErebusMessage {
   timestamp: number;
 }
 
+const cn = (...classes: Array<string | false | null | undefined>) =>
+  classes.filter(Boolean).join(" ");
+
 export function ErebusDock() {
-  const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ErebusMessage[]>([]);
   const [input, setInput] = useState("");
@@ -84,8 +106,6 @@ export function ErebusDock() {
       setIsLoading(false);
     }
   };
-
-  if (!user) return null;
 
   return (
     <>

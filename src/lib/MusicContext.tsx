@@ -1,134 +1,187 @@
-// src/lib/MusicContext.tsx
-// Global music player context
+// Audio provider for global music playback
 
-import React, { createContext, useContext, useState, useCallback, ReactNode } from "react";
-import { supabase } from "@/lib/supabaseClient";
-import { useUserEmail } from "@/hooks/useUserEmail";
+import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from "react";
 
 interface Track {
   id: string;
   title: string;
   artist: string;
-  audio_url: string;
-  cover_url?: string;
-  duration?: number;
+  url: string;
+  coverUrl?: string;
+  duration: number;
 }
 
 interface MusicContextType {
   currentTrack: Track | null;
+  playlist: Track[];
   isPlaying: boolean;
   volume: number;
-  queue: Track[];
-  playTrack: (track: Track) => void;
-  pauseTrack: () => void;
-  resumeTrack: () => void;
-  nextTrack: () => void;
-  prevTrack: () => void;
-  setVolume: (volume: number) => void;
-  addToQueue: (track: Track) => void;
-  clearQueue: () => void;
+  currentTime: number;
+  duration: number;
+  play: (track?: Track) => void;
+  pause: () => void;
+  next: () => void;
+  previous: () => void;
+  setVolume: (vol: number) => void;
+  seek: (time: number) => void;
+  addToPlaylist: (tracks: Track[]) => void;
+  setPlaylist: (tracks: Track[]) => void;
+  shuffle: () => void;
+  toggleLoop: () => void;
+  loopMode: "none" | "one" | "all";
 }
 
 const MusicContext = createContext<MusicContextType | undefined>(undefined);
 
-export function GlobalMusicProvider({ children }: { children: ReactNode }) {
-  const { email } = useUserEmail();
-  const userId = email || "anon";
-  
+export function MusicProvider({ children }: { children: React.ReactNode }) {
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
+  const [playlist, setPlaylist] = useState<Track[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolumeState] = useState(0.7);
-  const [queue, setQueue] = useState<Track[]>([]);
-  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [loopMode, setLoopMode] = useState<"none" | "one" | "all">("all");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const currentIndexRef = useRef(0);
 
   // Initialize audio element
-  React.useEffect(() => {
+  useEffect(() => {
     audioRef.current = new Audio();
     audioRef.current.volume = volume;
     
-    audioRef.current.onended = () => {
-      nextTrack();
-    };
-    
+    audioRef.current.addEventListener("timeupdate", () => {
+      if (audioRef.current) setCurrentTime(audioRef.current.currentTime);
+    });
+    audioRef.current.addEventListener("loadedmetadata", () => {
+      if (audioRef.current) setDuration(audioRef.current.duration);
+    });
+    audioRef.current.addEventListener("ended", () => {
+      handleTrackEnd();
+    });
+    audioRef.current.addEventListener("error", (e) => {
+      console.error("[Music] Audio error:", e);
+      handleTrackEnd();
+    });
+
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = "";
-      }
+      audioRef.current?.pause();
+      audioRef.current = null;
     };
   }, []);
 
-  const playTrack = useCallback((track: Track) => {
-    if (audioRef.current) {
-      audioRef.current.src = track.audio_url;
-      audioRef.current.play().catch(console.error);
-      setCurrentTrack(track);
-      setIsPlaying(true);
+  const handleTrackEnd = useCallback(() => {
+    if (loopMode === "one" && currentTrack) {
+      audioRef.current?.play().catch(console.error);
+      return;
     }
-  }, []);
-
-  const pauseTrack = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      setIsPlaying(false);
-    }
-  }, []);
-
-  const resumeTrack = useCallback(() => {
-    if (audioRef.current && currentTrack) {
-      audioRef.current.play().catch(console.error);
-      setIsPlaying(true);
-    }
-  }, [currentTrack]);
-
-  const nextTrack = useCallback(() => {
-    if (queue.length > 0) {
-      const next = queue[0];
-      setQueue(prev => prev.slice(1));
-      playTrack(next);
+    
+    if (loopMode === "all" || currentIndexRef.current < playlist.length - 1) {
+      next();
     } else {
-      pauseTrack();
+      setIsPlaying(false);
       setCurrentTrack(null);
     }
-  }, [queue, playTrack]);
+  }, [loopMode, currentTrack, playlist.length]);
 
-  const prevTrack = useCallback(() => {
-    // For simplicity, just restart current track
-    if (audioRef.current && currentTrack) {
-      audioRef.current.currentTime = 0;
+  const play = useCallback((track?: Track) => {
+    if (track) {
+      setCurrentTrack(track);
+      currentIndexRef.current = playlist.findIndex(t => t.id === track.id);
+      if (currentIndexRef.current === -1) currentIndexRef.current = 0;
     }
-  }, [currentTrack]);
+    
+    if (!currentTrack && playlist.length > 0) {
+      setCurrentTrack(playlist[0]);
+      currentIndexRef.current = 0;
+    }
+    
+    if (audioRef.current && currentTrack) {
+      audioRef.current.src = currentTrack.url;
+      audioRef.current.play().catch(console.error);
+      setIsPlaying(true);
+    }
+  }, [currentTrack, playlist]);
+
+  const pause = useCallback(() => {
+    audioRef.current?.pause();
+    setIsPlaying(false);
+  }, []);
+
+  const next = useCallback(() => {
+    if (playlist.length === 0) return;
+    currentIndexRef.current = (currentIndexRef.current + 1) % playlist.length;
+    const nextTrack = playlist[currentIndexRef.current];
+    setCurrentTrack(nextTrack);
+    if (audioRef.current) {
+      audioRef.current.src = nextTrack.url;
+      audioRef.current.play().catch(console.error);
+    }
+  }, [playlist]);
+
+  const previous = useCallback(() => {
+    if (playlist.length === 0) return;
+    currentIndexRef.current = (currentIndexRef.current - 1 + playlist.length) % playlist.length;
+    const prevTrack = playlist[currentIndexRef.current];
+    setCurrentTrack(prevTrack);
+    if (audioRef.current) {
+      audioRef.current.src = prevTrack.url;
+      audioRef.current.play().catch(console.error);
+    }
+  }, [playlist]);
 
   const setVolume = useCallback((vol: number) => {
     const clamped = Math.max(0, Math.min(1, vol));
     setVolumeState(clamped);
+    if (audioRef.current) audioRef.current.volume = clamped;
+  }, []);
+
+  const seek = useCallback((time: number) => {
     if (audioRef.current) {
-      audioRef.current.volume = clamped;
+      audioRef.current.currentTime = Math.max(0, Math.min(time, duration));
+      setCurrentTime(audioRef.current.currentTime);
     }
+  }, [duration]);
+
+  const addToPlaylist = useCallback((tracks: Track[]) => {
+    setPlaylist(prev => [...prev, ...tracks]);
   }, []);
 
-  const addToQueue = useCallback((track: Track) => {
-    setQueue(prev => [...prev, track]);
+  const setPlaylistTracks = useCallback((tracks: Track[]) => {
+    setPlaylist(tracks);
+    currentIndexRef.current = 0;
   }, []);
 
-  const clearQueue = useCallback(() => {
-    setQueue([]);
+  const shuffle = useCallback(() => {
+    setPlaylist(prev => [...prev].sort(() => Math.random() - 0.5));
+  }, []);
+
+  const toggleLoop = useCallback(() => {
+    setLoopMode(prev => {
+      if (prev === "none") return "all";
+      if (prev === "all") return "one";
+      return "none";
+    });
   }, []);
 
   return (
     <MusicContext.Provider value={{
       currentTrack,
+      playlist,
       isPlaying,
       volume,
-      queue,
-      playTrack,
-      pauseTrack,
-      resumeTrack,
-      nextTrack,
-      prevTrack,
+      currentTime,
+      duration,
+      play,
+      pause,
+      next,
+      previous,
       setVolume,
-      addToQueue,
-      clearQueue,
+      seek,
+      addToPlaylist: addToPlaylist,
+      setPlaylist: setPlaylistTracks,
+      shuffle,
+      toggleLoop,
+      loopMode,
     }}>
       {children}
     </MusicContext.Provider>
@@ -137,8 +190,8 @@ export function GlobalMusicProvider({ children }: { children: ReactNode }) {
 
 export function useMusic() {
   const context = useContext(MusicContext);
-  if (!context) {
-    throw new Error("useMusic must be used within a GlobalMusicProvider");
+  if (context === undefined) {
+    throw new Error("useMusic must be used within a MusicProvider");
   }
   return context;
 }

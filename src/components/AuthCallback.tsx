@@ -1,7 +1,18 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/lib/SupabaseAuthContext";
-import { supabase } from "@/lib/supabaseClient.ts";
+import { createClient } from "@supabase/supabase-js";
+
+const env = (import.meta as ImportMeta & {
+  env: {
+    VITE_SUPABASE_URL: string;
+    VITE_SUPABASE_ANON_KEY: string;
+  };
+}).env;
+
+const supabase = createClient(
+  env.VITE_SUPABASE_URL,
+  env.VITE_SUPABASE_ANON_KEY,
+);
 
 interface AuthCallbackProps {
   workerUrl: string;
@@ -20,8 +31,6 @@ export const AuthCallback: React.FC<AuthCallbackProps> = ({
   const [status, setStatus] = useState<string>(
     "Processing authentication callback...",
   );
-  const { } = useAuth();
-
   useEffect(() => {
     let isMounted = true;
 

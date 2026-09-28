@@ -4,32 +4,25 @@
 
 import { useRef, useMemo } from "react";
 import {
-  Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1,
-  Volume2, Volume1, VolumeX, Music2, ListMusic,
+  Play, Pause, SkipBack, SkipForward,
+  Volume2, Volume1, VolumeX, Music2,
 } from "lucide-react";
-import { useMusic } from "@/lib/MusicContext";
+import { useMusic } from "../lib/MusicContext";
 
 const BAR_COUNT = 48;
 
 export default function GlobalMusicPlayer() {
   const {
     currentTrack,
-    playing,
-    progress,
+    isPlaying,
+    currentTime,
     duration,
     volume,
-    muted,
     shuffle,
-    repeat,
-    queue,
-    togglePlay,
+    play,
+    pause,
     next,
-    prev,
-    seekTo,
     setVolume,
-    setMuted,
-    setShuffle,
-    setRepeat,
   } = useMusic();
 
   const waveformRef = useRef<HTMLDivElement>(null);
@@ -50,23 +43,10 @@ export default function GlobalMusicPlayer() {
 
   if (!currentTrack) return null;
 
-  const pct = duration > 0 ? Math.min(1, progress / duration) : 0;
+  const pct = duration > 0 ? Math.min(1, currentTime / duration) : 0;
   const playedCount = Math.floor(pct * BAR_COUNT);
 
-  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!waveformRef.current || !duration) return;
-    const rect = waveformRef.current.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    seekTo(ratio * duration);
-  };
-
-  const VolumeIcon = muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
-  const RepeatIcon = repeat === "one" ? Repeat1 : Repeat;
-
-  const cycleRepeat = () => {
-    setRepeat(repeat === "off" ? "all" : repeat === "all" ? "one" : "off");
-  };
-
+  const VolumeIcon = volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
   return (
     <div
       className="fixed bottom-0 left-0 right-0 z-40 flex items-center gap-4 px-4 py-2.5 border-t"
@@ -79,34 +59,21 @@ export default function GlobalMusicPlayer() {
     >
       {/* Track info */}
       <div className="flex items-center gap-3 w-64 shrink-0">
-        {currentTrack.thumbnailUrl ? (
-          <img
-            src={currentTrack.thumbnailUrl}
-            alt=""
-            className="w-11 h-11 rounded-lg object-cover shrink-0"
-          />
-        ) : (
-          <div
-            className="w-11 h-11 rounded-lg flex items-center justify-center shrink-0"
-            style={{
-              background:
-                "linear-gradient(135deg, oklch(0.55 0.22 20 / 40%), oklch(0.35 0.18 20 / 60%))",
-            }}
-          >
-            <Music2 size={18} className="text-primary" />
-          </div>
-        )}
+        <div
+          className="w-11 h-11 rounded-lg flex items-center justify-center shrink-0"
+          style={{
+            background:
+              "linear-gradient(135deg, oklch(0.55 0.22 20 / 40%), oklch(0.35 0.18 20 / 60%))",
+          }}
+        >
+          <Music2 size={18} className="text-primary" />
+        </div>
         <div className="min-w-0 flex-1">
           <div className="text-xs text-white-90 truncate font-display tracking-wide">
             {currentTrack.title}
           </div>
           <div className="text-[10px] text-white-40 truncate">
-            {currentTrack.artist || currentTrack.genre || "—"}
-            {queue.length > 0 && (
-              <span className="ml-2 text-white-30">
-                · queue {queue.length}
-              </span>
-            )}
+            {currentTrack.artist || "—"}
           </div>
         </div>
       </div>
@@ -114,25 +81,16 @@ export default function GlobalMusicPlayer() {
       {/* Controls */}
       <div className="flex items-center gap-2 shrink-0">
         <button
-          onClick={() => setShuffle(!shuffle)}
-          className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
-            shuffle ? "text-primary" : "text-white-40 hover:text-white-70"
-          }`}
-          title="Shuffle"
-        >
-          <Shuffle size={14} />
-        </button>
-        <button
-          onClick={prev}
+          onClick={() => pause()}
           className="w-8 h-8 rounded-lg flex items-center justify-center text-white-50 hover:text-white-90 transition-colors"
         >
           <SkipBack size={15} />
         </button>
         <button
-          onClick={togglePlay}
+          onClick={isPlaying ? pause : () => play()}
           className="w-10 h-10 rounded-full flex items-center justify-center glass-crimson text-primary hover:glow-crimson-sm transition-all"
         >
-          {playing ? <Pause size={16} /> : <Play size={16} />}
+          {isPlaying ? <Pause size={16} /> : <Play size={16} />}
         </button>
         <button
           onClick={next}
@@ -140,27 +98,16 @@ export default function GlobalMusicPlayer() {
         >
           <SkipForward size={15} />
         </button>
-        <button
-          onClick={cycleRepeat}
-          className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
-            repeat !== "off" ? "text-primary" : "text-white-40 hover:text-white-70"
-          }`}
-          title={`Repeat: ${repeat}`}
-        >
-          <RepeatIcon size={14} />
-        </button>
       </div>
 
       {/* Waveform + times */}
       <div className="flex-1 min-w-0 flex items-center gap-2">
         <span className="text-[10px] text-white-40 shrink-0 tabular-nums">
-          {fmt(progress)}
+          {fmt(currentTime)}
         </span>
         <div
           ref={waveformRef}
-          onClick={handleSeek}
-          className="flex-1 h-8 flex items-center gap-[2px] cursor-pointer group"
-          title="Click to seek"
+          className="flex-1 h-8 flex items-center gap-[2px] group"
         >
           {bars.map((h, i) => {
             const played = i < playedCount;
@@ -189,7 +136,7 @@ export default function GlobalMusicPlayer() {
       {/* Volume */}
       <div className="flex items-center gap-2 w-40 shrink-0">
         <button
-          onClick={() => setMuted(!muted)}
+          onClick={() => setVolume(volume === 0 ? 1 : 0)}
           className="w-8 h-8 rounded-lg flex items-center justify-center text-white-40 hover:text-white-70 transition-colors"
         >
           <VolumeIcon size={14} />
@@ -199,7 +146,7 @@ export default function GlobalMusicPlayer() {
           min={0}
           max={1}
           step={0.01}
-          value={muted ? 0 : volume}
+          value={volume}
           onChange={(e) => setVolume(parseFloat(e.target.value))}
           className="flex-1 h-1 accent-primary cursor-pointer"
         />

@@ -6,17 +6,67 @@
 import {
   useCallback, useEffect, useMemo, useRef, useState,
 } from "react";
+import type { ReactNode } from "react";
 import {
   MessageSquare, Search, Phone, Video, MoreVertical, Smile, Paperclip,
   Send, Bookmark, Trash2, Users, CreditCard, Loader2, X, AlertCircle,
   Check, Sparkles, RefreshCw, Mail, ExternalLink, Copy, Star, Download,
   Plus, Inbox, Filter, Lock, Wand2,
 } from "lucide-react";
-import PanelLayout from "@/components/layout/PanelLayout";
-import { useUserEmail } from "@/lib/useUserEmail";
-import { invokeLLM } from "@/lib/invokeLLM";
-import { lifeosApi } from "@/lib/lifeosApi";
-import { usePersistentState } from "@/lib/usePersistentState";
+
+async function invokeLLM({ prompt }: { prompt: string }): Promise<{ text?: string; content?: string }> {
+  const response = await fetch("/api/llm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt }),
+  });
+  if (!response.ok) throw new Error(`AI request failed (${response.status})`);
+  const result = await response.json() as { text?: string; content?: string; response?: string };
+  return { text: result.text ?? result.response, content: result.content };
+}
+
+// Keep this panel self-contained when the optional shared user hook is not
+// available in the current build.
+function useUserEmail(): string {
+  const [email, setEmail] = useState("");
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("user_email")
+        ?? localStorage.getItem("lifeos_user_email");
+      if (stored) setEmail(stored);
+    } catch {
+      // localStorage may be unavailable during SSR or in restricted browsers.
+    }
+  }, []);
+
+  return email;
+}
+
+function PanelLayout({
+  title,
+  subtitle,
+  icon,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  icon?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <main className="h-full flex flex-col overflow-hidden">
+      <header className="flex items-center gap-3 px-1 pb-3 shrink-0">
+        {icon && <span className="text-teal-400">{icon}</span>}
+        <div>
+          <h1 className="text-lg font-semibold text-white">{title}</h1>
+          {subtitle && <p className="text-xs text-white/50">{subtitle}</p>}
+        </div>
+      </header>
+      <div className="flex-1 min-h-0">{children}</div>
+    </main>
+  );
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    ░░░ OPTIONAL IMPORTS — degrade gracefully if not present ░░░
@@ -28,7 +78,10 @@ import { usePersistentState } from "@/lib/usePersistentState";
 let useMessagingHook: ((uid?: string) => MessagingState) | null = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const mod = require("@/_core/hooks/usemessaging");
+  const runtimeRequire = (globalThis as typeof globalThis & {
+    require?: (id: string) => { useMessaging?: (uid?: string) => MessagingState };
+  }).require;
+  const mod = runtimeRequire?.("@/_core/hooks/usemessaging");
   if (mod?.useMessaging) useMessagingHook = mod.useMessaging;
 } catch { /* not installed — use fallback */ }
 
@@ -67,7 +120,6 @@ const electron: {
 type PlatformId =
   | "sms" | "messenger" | "instagram" | "tiktok" | "telegram"
   | "signal" | "whatsapp" | "snapchat" | "google-voice" | "email";
-
 interface Platform {
   id: PlatformId;
   icon: string;
@@ -306,7 +358,7 @@ export default function CommunicationsPanel() {
   const userEmail = useUserEmail();
 
   /* Messaging state — real hook or fallback */
-  const hookState: MessagingState | null = useMessagingHook ? useMessagingHook(userEmail) : null;
+  const hookState: MessagingState | null = useMessagingHook ? useMessagingHook(typeof userEmail === "string" ? userEmail : "") : null;
 
   const [fallbackConvs] = useState<Conversation[]>(() => buildFallbackConversations());
   const [localMessages, setLocalMessages] = useState<Record<string, ChatMessage[]>>({});
@@ -444,7 +496,7 @@ Reply only — no greeting line labels, no markdown. Under 60 words.`,
       ).join("\n");
       const res = await invokeLLM({
         prompt: `Summarize this conversation in 2-3 sentences. Then list 2 concrete next actions.
-Conversation with ${active.contact_name}:
+LConversation with ${active.contact_name}:
 ${history}`,
       });
       setAiSummary(res.text || res.content || "");

@@ -12,10 +12,100 @@ import {
   MessageSquare, Users, Cpu, Share2, FolderKanban, MapPin, Lock,
   DollarSign, Play, Pause, Eye, ArrowRight,
 } from "lucide-react";
-import PanelLayout from "@/components/layout/PanelLayout";
-import { lifeosApi } from "@/lib/api";
-import { invokeLLM } from "@/lib/llm";
-import { useUserEmail } from "@/lib/useUserEmail";
+/** Local LLM adapter.  Keep this panel self-contained so it also builds in
+ * deployments that do not expose the optional `@/lib/llm` module. */
+interface LLMResponse {
+  text?: string;
+  content?: string;
+}
+
+async function invokeLLM(request: { prompt: string }): Promise<LLMResponse> {
+  const response = await fetch("/api/llm", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(request),
+  });
+  if (!response.ok) {
+    throw new Error(`LLM request failed (${response.status})`);
+  }
+  return response.json() as Promise<LLMResponse>;
+}
+
+function useActivityUserEmail(): { email: string } {
+  const [email] = useState(() => {
+    try {
+      const candidates = ["lifeos_user_email", "user_email", "email"];
+      for (const key of candidates) {
+        const value = localStorage.getItem(key)?.trim();
+        if (value) return value;
+      }
+    } catch {
+      // localStorage may be unavailable in private or server-rendered contexts.
+    }
+    return "";
+  });
+
+  return { email };
+}
+
+const lifeosApi = {
+  async get<T>(url: string): Promise<T> {
+    const response = await fetch(url, {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) {
+      throw new Error(`Request failed (${response.status})`);
+    }
+    return response.json() as Promise<T>;
+  },
+  async post<T = unknown>(url: string, body: unknown): Promise<T> {
+    const response = await fetch(url, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw new Error(`Request failed (${response.status})`);
+    }
+    return response.json() as Promise<T>;
+  },
+};
+
+interface PanelLayoutProps {
+  title: string;
+  subtitle?: string;
+  icon?: React.ReactNode;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+}
+
+function PanelLayout({ title, subtitle, icon, actions, children }: PanelLayoutProps) {
+  return (
+    <section className="flex h-full min-h-0 flex-col gap-4">
+      <header className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          {icon && <div className="shrink-0 text-primary">{icon}</div>}
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-semibold text-white">{title}</h1>
+            {subtitle && <p className="truncate text-xs text-white/45">{subtitle}</p>}
+          </div>
+        </div>
+        {actions && <div className="shrink-0">{actions}</div>}
+      </header>
+      <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+    </section>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -146,7 +236,7 @@ function downloadCsv(filename: string, csv: string) {
 /* ------------------------------------------------------------------ */
 
 export default function ActivityFeedPanel() {
-  const { email } = useUserEmail();
+  const { email } = useActivityUserEmail();
 
   /* ---------- persisted UI prefs ---------- */
   const [filter, setFilter] = useState<FilterKey>(() => lsGet<FilterKey>(LS.filter, "all"));

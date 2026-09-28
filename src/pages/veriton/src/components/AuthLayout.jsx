@@ -1,5 +1,8 @@
 import React from "react";
 
+/**
+ * @param {{ icon: React.ElementType, title: string, subtitle?: string, footer?: React.ReactNode, children?: React.ReactNode }} props
+ */
 export default function AuthLayout({
   icon: Icon,
   title,

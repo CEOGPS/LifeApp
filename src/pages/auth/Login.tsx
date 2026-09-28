@@ -1,16 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/lib/SupabaseAuthContext";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useAuth } from "../../lib/SupabaseAuthContext";
+import { Button } from "../../components/ui/button";
 import { motion } from "framer-motion";
 
 export default function Login() {
@@ -63,22 +54,27 @@ export default function Login() {
     >
       <div className="w-full max-w-sm">
         <div className="flex flex-col gap-6">
-          <Card>
-            <CardHeader className="text-center">
-              <CardTitle className="text-2xl">{isSignUp ? "Create Account" : "Welcome Back"}</CardTitle>
-              <CardDescription>
+          <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+            <div className="flex flex-col space-y-1.5 p-6 text-center">
+              <h3 className="text-2xl font-semibold leading-none tracking-tight">
+                {isSignUp ? "Create Account" : "Welcome Back"}
+              </h3>
+              <p className="text-sm text-muted-foreground">
                 {isSignUp
                   ? "Enter your details to get started"
                   : "Sign in to your account to continue"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+              </p>
+            </div>
+            <div className="p-6 pt-0">
               <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
+                  <label htmlFor="email" className="text-sm font-medium leading-none">
+                    Email
+                  </label>
+                  <input
                     id="email"
                     type="email"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     placeholder="you@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -87,10 +83,13 @@ export default function Login() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
+                  <label htmlFor="password" className="text-sm font-medium leading-none">
+                    Password
+                  </label>
+                  <input
                     id="password"
                     type="password"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -155,8 +154,8 @@ export default function Login() {
                   {isSignUp ? "Sign in" : "Sign up"}
                 </button>
               </p>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
       </div>
     </motion.div>

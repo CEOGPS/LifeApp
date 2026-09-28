@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { Music2, Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Shuffle, ListMusic, Check } from "lucide-react";
-import { useMusic } from "@/platform/audio/MusicContext";
 
 type Track = {
   id: string;
@@ -13,6 +12,42 @@ type Track = {
 };
 
 type Playlist = { id: string; name: string; cover: string | null; color: string; tracks: string[] };
+
+type PlayerTrack = { id: string; title: string; artist: string; url: string; duration: number };
+
+function useMusic() {
+  const [currentTrack, setCurrentTrack] = useState<PlayerTrack | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [volume, setVolume] = useState(0.8);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [playlist, setPlaylist] = useState<PlayerTrack[]>([]);
+  const [loopMode, setLoopMode] = useState(false);
+
+  const play = (track?: PlayerTrack) => {
+    if (track) {
+      setCurrentTrack(track);
+      setPlaylist((items) => items.some((item) => item.id === track.id) ? items : [...items, track]);
+      setDuration(track.duration || 0);
+      setCurrentTime(0);
+    }
+    setIsPlaying(true);
+  };
+  const pause = () => setIsPlaying(false);
+  const move = (offset: number) => {
+    if (!playlist.length) return;
+    const current = playlist.findIndex((item) => item.id === currentTrack?.id);
+    setCurrentTrack(playlist[(current + offset + playlist.length) % playlist.length]);
+    setIsPlaying(true);
+  };
+
+  return {
+    currentTrack, playlist, isPlaying, volume, currentTime, duration,
+    play, pause, next: () => move(1), previous: () => move(-1), setVolume,
+    seek: setCurrentTime, setPlaylist, shuffle: () => {}, loopMode,
+    toggleLoop: () => setLoopMode((value) => !value),
+  };
+}
 
 const SOURCES = [
   { label: "Library", path: "/veriton/library" },

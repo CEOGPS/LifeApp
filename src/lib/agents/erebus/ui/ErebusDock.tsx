@@ -9,8 +9,6 @@
 //   - Avatar window has cursor-tracked pupils and a speaking mouth
 //   - No unmounted setState, no per-keystroke re-renders of the whole tree
 //
-// @ts-nocheck — typing deferred; panel is JS-in-TSX.
-
 import React, {
   useState,
   useRef,
@@ -215,7 +213,7 @@ const CHAT_MODES: { icon: React.ReactNode; label: ChatMode }[] = [
 const COLOR_OPTIONS: ColorOption[] = [
   { label: "Crimson", value: "text-primary", hex: "oklch(0.55 0.22 20)" },
   { label: "Blue", value: "text-blue-400", hex: "#60a5fa" },
-  { label: "Teal", value: "text-teal-400", hex: "oklch(0.75 0.15 175)" },
+  { label: "Teal", value: "text-teal-400", hex: "hsl(var(--teal))" },
   { label: "Purple", value: "text-purple-400", hex: "#c084fc" },
   { label: "Green", value: "text-green-400", hex: "#4ade80" },
   { label: "Orange", value: "text-orange-400", hex: "#fb923c" },

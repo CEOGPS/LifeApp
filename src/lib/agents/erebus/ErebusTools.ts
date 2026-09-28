@@ -1,4 +1,3 @@
-// @ts-nocheck -- deep agent logic; typing deferred
 // ErebusTools.ts — Web + LifeOS + Media tool execution for Erebus
 //
 // Fixes in this revision:

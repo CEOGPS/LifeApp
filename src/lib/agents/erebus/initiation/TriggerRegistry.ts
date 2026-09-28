@@ -1,6 +1,6 @@
 // ─── Trigger Registry ─────────────────────────────────────────────────────
 
-import { TriggerResult, TriggerType, TriggerSettings } from "../types/initiation.types";
+import type { TriggerResult, TriggerType, TriggerSettings } from "../types/initiation.types";
 
 export class TriggerRegistry {
   private userActivity: { lastActive: number; isIdle: boolean } = {

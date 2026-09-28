@@ -1,25 +1,11 @@
 import { motion } from "motion/react";
-import Module from "@/pages/dashboard/_components/Module";
-import TimeDateWeather from "@/pages/dashboard/_components/TimeDateWeather";
-import NotesModule from "@/pages/dashboard/_components/NotesModule";
-import LeadsModule from "@/pages/dashboard/_components/LeadsModule";
-import NotificationsModule from "@/pages/dashboard/_components/NotificationsModule";
-import AgentMonitor from "@/pages/dashboard/_components/AgentMonitor";
-import { YoutubePlayerWithPersistence as YoutubePlayer } from "@/pages/dashboard/_components/YoutubePlayer";
-import MusicPlayer from "@/pages/dashboard/_components/MusicPlayer";
-import FinancialStats from "@/pages/dashboard/_components/FinancialStats";
-import RoiAnalysis from "@/pages/dashboard/_components/RoiAnalysis";
-import CreditScore from "@/pages/dashboard/_components/CreditScore";
-import BudgetExpenses from "@/pages/dashboard/_components/BudgetExpenses";
-import AiMoneyTips from "@/pages/dashboard/_components/AiMoneyTips";
-import AiInsights from "@/pages/dashboard/_components/AiInsights";
-import LifeHacks from "@/pages/dashboard/_components/LifeHacks";
-import SocialAnalytics from "@/pages/dashboard/_components/SocialAnalytics";
-import MarketingAnalytics from "@/pages/dashboard/_components/MarketingAnalytics";
-import CalendarModule from "@/pages/dashboard/_components/CalendarModule";
-import BrowserArea from "@/pages/dashboard/_components/BrowserArea";
-import QuickLinks from "@/pages/dashboard/_components/QuickLinks";
-import ActivityFeedPanel from "@/pages/dashboard/_components/ActivityFeedPanel";
+import Module from "./_components/Module";
+import TimeDateWeather from "./_components/TimeDateWeather";
+import { YoutubePlayerWithPersistence as YoutubePlayer } from "./_components/YoutubePlayer";
+import FinancialStats from "./_components/FinancialStats";
+import RoiAnalysis from "./_components/RoiAnalysis";
+import CreditScore from "./_components/CreditScore";
+import BudgetExpenses from "./_components/BudgetExpenses";
 
 import {
   Clock,
@@ -43,6 +29,22 @@ import {
   Link2,
   Activity,
 } from "lucide-react";
+
+function MusicPlayer() {
+  return (
+    <div className="flex h-full items-center justify-center text-sm text-white/60">
+      Music player unavailable
+    </div>
+  );
+}
+
+function BrowserArea() {
+  return (
+    <div className="flex h-full items-center justify-center text-sm text-white/60">
+      Browser unavailable
+    </div>
+  );
+}
 
 export default function Dashboard() {
   return (
@@ -99,19 +101,23 @@ export default function Dashboard() {
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-green" />
               <span
                 className="text-[9px] font-display"
-                style={{ color: "oklch(0.75 0.15 175)" }}
+                style={{ color: "hsl(var(--teal))" }}
               >
                 LIVE
               </span>
             </div>
           }
         >
-          <NotificationsModule />
+          <div className="flex h-full items-center justify-center text-sm text-white/60">
+            No notifications
+          </div>
         </Module>
 
         {/* Quick Links — moved near top */}
         <Module title="Quick Links" icon={<Link2 size={13} />}>
-          <QuickLinks />
+          <div className="flex h-full items-center justify-center text-sm text-white/60">
+            No quick links available
+          </div>
         </Module>
 
         {/* Browser — moved near top */}
@@ -125,22 +131,9 @@ export default function Dashboard() {
 
         {/* Calendar (moved to where Tasks was) */}
         <Module title="Calendar" icon={<Calendar size={13} />}>
-          <CalendarModule />
-        </Module>
-
-        {/* Notes */}
-        <Module title="Notes" icon={<FileText size={13} />}>
-          <NotesModule />
-        </Module>
-
-        {/* AI Agent Monitor */}
-        <Module title="AI Task Monitor" icon={<Bot size={13} />} accent>
-          <AgentMonitor />
-        </Module>
-
-        {/* Leads */}
-        <Module title="Leads" icon={<UserPlus size={13} />}>
-          <LeadsModule />
+          <div className="flex h-full items-center justify-center text-sm text-white/60">
+            Calendar unavailable
+          </div>
         </Module>
 
         {/* YouTube Player — full width (2 columns) */}
@@ -150,19 +143,6 @@ export default function Dashboard() {
                   className="col-span-2"
                 >
                   <YoutubePlayer />
-                </Module>
-
-                {/* Social Media Analytics - underneath YouTube */}
-                <Module title="Social Analytics" icon={<Share2 size={13} />}>
-                  <SocialAnalytics />
-                </Module>
-
-                {/* Marketing & Website Analytics - underneath YouTube */}
-                <Module
-                  title="Marketing & Web Analytics"
-                  icon={<Megaphone size={13} />}
-                >
-                  <MarketingAnalytics />
                 </Module>
 
                 {/* Music Player */}
@@ -190,20 +170,13 @@ export default function Dashboard() {
           <BudgetExpenses />
         </Module>
 
-        {/* AI Money Tips */}
-        <Module title="AI Money Tips" icon={<Sparkles size={13} />} accent>
-          <AiMoneyTips />
-        </Module>
-
         {/* AI Insights */}
         <Module title="AI Insights" icon={<Brain size={13} />} accent>
-          <AiInsights />
+          <div className="flex h-full items-center justify-center text-sm text-white/60">
+            AI insights unavailable
+          </div>
         </Module>
 
-        {/* Life Hacks */}
-                <Module title="Life Hacks" icon={<Lightbulb size={13} />}>
-                  <LifeHacks />
-                </Module>
               </div>
 
       {/* Full-width activity feed — shows all actions across the dashboard */}
@@ -215,7 +188,9 @@ export default function Dashboard() {
           className="w-full"
         >
           <div className="h-[460px] overflow-hidden">
-            <ActivityFeedPanel />
+            <div className="flex h-full items-center justify-center text-sm text-white/60">
+              No recent activity
+            </div>
           </div>
         </Module>
       </div>

@@ -1,59 +1,30 @@
-// src/hooks/useUserEmail.ts
-// Hook to get current user's email from Supabase auth
+import { useEffect, useState } from "react";
 
-import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabaseClient";
+const USER_EMAIL_KEY = "userEmail";
 
-export function useUserEmail(): { email: string | null; loading: boolean } {
-  const [email, setEmail] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const getEmail = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        setEmail(session?.user?.email || null);
-      } catch (e) {
-        console.error("Failed to get user email:", e);
-        setEmail(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    getEmail();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setEmail(session?.user?.email || null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  return { email, loading };
+export function getCurrentUserEmail(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(USER_EMAIL_KEY);
 }
 
-// Re-export from lib for backward compatibility
-export function persistUserEmail(email: string | null): void {
+export function persistUserEmail(email: string): void {
   if (typeof window !== "undefined") {
-    if (email) {
-      localStorage.setItem("lifeos_user_email", email);
-    } else {
-      localStorage.removeItem("lifeos_user_email");
-    }
+    window.localStorage.setItem(USER_EMAIL_KEY, email);
   }
 }
 
 export function clearUserEmail(): void {
   if (typeof window !== "undefined") {
-    localStorage.removeItem("lifeos_user_email");
+    window.localStorage.removeItem(USER_EMAIL_KEY);
   }
 }
 
-export function getCurrentUserEmail(): string | null {
-  if (typeof window !== "undefined") {
-    return localStorage.getItem("lifeos_user_email");
-  }
-  return null;
+export function useUserEmail(): string | null {
+  const [email, setEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    setEmail(getCurrentUserEmail());
+  }, []);
+
+  return email;
 }

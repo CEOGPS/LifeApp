@@ -11,7 +11,7 @@ import {
   Loader2, AlertCircle, CheckCircle, Info, RefreshCw, ChevronDown,
   ChevronUp, CreditCard, IdCard, Code, Server, Cpu, Save,
 } from "lucide-react";
-import PanelLayout from "@/components/layout/PanelLayout";
+import { PanelLayout } from "@/components/layout/PanelLayout";
 import { lifeosApi } from "@/lib/lifeosApi";
 
 /* ------------------------------------------------------------------ */
@@ -271,7 +271,7 @@ export default function VaultPanel() {
     try {
       const res = await lifeosApi<{ token: string; expires_at: number }>(
         isFirstTime ? "/api/vault/init" : "/api/vault/unlock",
-        { method: "POST", body: { master_password: masterPassword } },
+        { method: "POST", body: JSON.stringify({ master_password: masterPassword }) },
       );
       if (!res.token) throw new Error("No vault token returned");
       setVaultToken(res.token);
@@ -445,7 +445,7 @@ export default function VaultPanel() {
       await lifeosApi("/api/vault/items", {
         method: "POST",
         headers: { Authorization: `Bearer ${vaultToken}` },
-        body,
+        body: JSON.stringify(body),
       });
       pushToast("success", "Item saved");
       setAddDraft(null);
@@ -471,7 +471,7 @@ export default function VaultPanel() {
       await lifeosApi(`/api/vault/items/${editDraft.id}`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${vaultToken}` },
-        body,
+        body: JSON.stringify(body),
       });
       // Update decrypted cache so the card reflects the new values without a re-reveal
       setDecrypted((d) => ({ ...d, [editDraft.id]: { ...editDraft.fields } }));
@@ -492,7 +492,7 @@ export default function VaultPanel() {
       await lifeosApi(`/api/vault/items/${id}`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${vaultToken}` },
-        body: { name: clean },
+        body: JSON.stringify({ name: clean }),
       });
       setEditingId(null);
       setEditingName("");
@@ -507,7 +507,7 @@ export default function VaultPanel() {
       await lifeosApi(`/api/vault/items/${it.id}`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${vaultToken}` },
-        body: { favorite: !it.favorite },
+        body: JSON.stringify({ favorite: !it.favorite }),
       });
       await loadItems();
     } catch (e: any) {
@@ -542,7 +542,7 @@ export default function VaultPanel() {
     try {
       await lifeosApi("/api/vault/change-password", {
         method: "POST",
-        body: { old_password: pwModal.old, new_password: pwModal.next },
+        body: JSON.stringify({ old_password: pwModal.old, new_password: pwModal.next }),
       });
       pushToast("success", "Master password changed — session invalidated, please unlock again");
       setPwModal(null);
@@ -559,7 +559,7 @@ export default function VaultPanel() {
       await lifeosApi("/api/vault/purge", {
         method: "POST",
         headers: { Authorization: `Bearer ${vaultToken}` },
-        body: { confirm: "PURGE" },
+        body: JSON.stringify({ confirm: "PURGE" }),
       });
       setConfirmPurge(false);
       setDecrypted({});
@@ -799,7 +799,7 @@ export default function VaultPanel() {
         {tab === "settings" && (
           <div className="flex flex-col gap-3">
             <div className="glass rounded-xl border border-white/8 p-3">
-              <div className="text-[10px] font-display tracking-widest mb-2" style={{ color: "oklch(0.75 0.15 175)" }}>
+              <div className="text-[10px] font-display tracking-widest mb-2" style={{ color: "hsl(var(--teal))" }}>
                 VAULT SETTINGS
               </div>
 
@@ -847,7 +847,7 @@ export default function VaultPanel() {
             </div>
 
             <div className="glass rounded-xl border border-white/8 p-3">
-              <div className="text-[10px] font-display tracking-widest mb-2" style={{ color: "oklch(0.75 0.15 175)" }}>
+              <div className="text-[10px] font-display tracking-widest mb-2" style={{ color: "hsl(var(--teal))" }}>
                 MASTER PASSWORD & BACKUP
               </div>
               <div className="flex flex-wrap gap-2">

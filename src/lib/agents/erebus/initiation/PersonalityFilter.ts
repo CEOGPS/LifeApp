@@ -1,6 +1,6 @@
 // ─── Personality Filter ──────────────────────────────────────────────────
 
-import { Personality } from "../types/initiation.types";
+import type { Personality } from "../types/initiation.types";
 
 export class PersonalityFilter {
   private personality: Personality;

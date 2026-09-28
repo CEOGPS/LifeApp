@@ -1,15 +1,33 @@
-// @ts-nocheck -- converted from .js; deep agent logic, typing deferred
+// src/lib/agents/UnifiedAgentCore.ts
 // ============================================================
-// UnifiedAgentCore.js — The foundation for Erebus & Kranos
-// Place in: src/lib/agents/UnifiedAgentCore.js
+// UnifiedAgentCore.ts — The foundation for Erebus & Kranos
 // ============================================================
 
-// === Configuration (env-driven, with fallbacks) ===
-const config = {
+interface AgentConfig {
+  worker: string;
+  fallbackWorkers: (string | null)[];
+  browserAgent: string;
+  mediaEndpoints: {
+    image: string[];
+    video: string[];
+    audio: string[];
+  };
+  cloudflare: {
+    apiToken: string | null;
+    accountId: string;
+    projectName: string;
+  };
+  bd: {
+    siteUrl: string;
+    adminPath: string;
+  };
+}
+
+const config: AgentConfig = {
   worker: import.meta.env.VITE_WORKER_URL || "https://lifeos1-api.ceogps.workers.dev",
   fallbackWorkers: [
-    import.meta.env.VITE_WORKER_URL || import.meta.env.VITE_WORKER_URL || "https://lifeos1-api.ceogps.workers.dev",
-    null, // local mock as last resort
+    import.meta.env.VITE_WORKER_URL || "https://lifeos1-api.ceogps.workers.dev",
+    null,
   ],
   browserAgent: "http://localhost:8100",
   mediaEndpoints: {
@@ -29,8 +47,27 @@ const config = {
 };
 
 // === Tool Definition System ===
+interface ToolSpec {
+  name: string;
+  description: string;
+  parameters: {
+    required?: string[];
+    [key: string]: any;
+  };
+  permission: string;
+  handler: (args: any, context: any) => Promise<any>;
+  requiresBrowser?: boolean;
+}
+
 class Tool {
-  constructor(spec) {
+  public name: string;
+  public description: string;
+  public parameters: ToolSpec["parameters"];
+  public permission: string;
+  public handler: ToolSpec["handler"];
+  public requiresBrowser: boolean;
+
+  constructor(spec: ToolSpec) {
     this.name = spec.name;
     this.description = spec.description;
     this.parameters = spec.parameters;
@@ -39,7 +76,7 @@ class Tool {
     this.requiresBrowser = spec.requiresBrowser || false;
   }
 
-  validate(args) {
+  validate(args: any): boolean {
     const required = this.parameters.required || [];
     for (const req of required) {
       if (args[req] === undefined) {
@@ -49,22 +86,31 @@ class Tool {
     return true;
   }
 
-  async execute(args, context) {
+  async execute(args: any, context: any): Promise<any> {
     this.validate(args);
     return this.handler(args, context);
   }
 }
 
 // === Memory System ===
+interface MemoryEntry {
+  role: string;
+  content: string;
+  metadata: any;
+  timestamp: number;
+  id: string;
+}
+
 class MemorySystem {
+  private episodic: MemoryEntry[] = [];
+  private semantic: Map<string, any> = new Map();
+  private procedural: any[] = [];
+
   constructor() {
-    this.episodic = [];
-    this.semantic = new Map();
-    this.procedural = [];
     this.load();
   }
 
-  add(role, content, metadata = {}) {
+  add(role: string, content: string, metadata: any = {}) {
     this.episodic.push({
       role,
       content,
@@ -76,7 +122,7 @@ class MemorySystem {
     this.persist();
   }
 
-  async search(query, limit = 5) {
+  async search(query: string, limit = 5): Promise<MemoryEntry[]> {
     const terms = query.toLowerCase().split(/\s+/);
     const scored = this.episodic.map((ep) => {
       let score = 0;
@@ -105,22 +151,38 @@ class MemorySystem {
   load() {
     const saved = localStorage.getItem("agent_memory");
     if (saved) {
-      const data = JSON.parse(saved);
-      this.episodic = data.episodic || [];
-      this.procedural = data.procedural || [];
+      try {
+        const data = JSON.parse(saved);
+        this.episodic = data.episodic || [];
+        this.procedural = data.procedural || [];
+      } catch (e) {
+        console.error("Failed to load agent memory", e);
+      }
     }
+  }
+
+  getEpisodic() {
+    return this.episodic;
   }
 }
 
 // === Browser Session Manager (Real Takeover) ===
+interface BrowserSession {
+  id: string;
+  wsUrl: string;
+  createdAt: number;
+}
+
 class BrowserSessionManager {
-  constructor(agentUrl) {
+  private agentUrl: string;
+  private activeSessions: Map<string, BrowserSession> = new Map();
+  private userTakeoverMode: boolean = false;
+
+  constructor(agentUrl: string) {
     this.agentUrl = agentUrl;
-    this.activeSessions = new Map();
-    this.userTakeoverMode = false;
   }
 
-  async createSession(sessionId = crypto.randomUUID()) {
+  async createSession(sessionId = crypto.randomUUID()): Promise<string> {
     const response = await fetch(`${this.agentUrl}/session/create`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -138,23 +200,23 @@ class BrowserSessionManager {
     throw new Error("Failed to create browser session");
   }
 
-  async navigate(sessionId, url) {
+  async navigate(sessionId: string, url: string): Promise<any> {
     return this.exec(sessionId, "navigate", { url });
   }
 
-  async click(sessionId, selector) {
+  async click(sessionId: string, selector: string): Promise<any> {
     return this.exec(sessionId, "click", { selector });
   }
 
-  async type(sessionId, selector, text) {
+  async type(sessionId: string, selector: string, text: string): Promise<any> {
     return this.exec(sessionId, "type", { selector, text });
   }
 
-  async screenshot(sessionId) {
+  async screenshot(sessionId: string): Promise<any> {
     return this.exec(sessionId, "screenshot", {});
   }
 
-  async takeover(sessionId) {
+  async takeover(sessionId: string): Promise<{ message: string; sessionId: string }> {
     this.userTakeoverMode = true;
     await this.exec(sessionId, "takeover", {});
     return {
@@ -164,12 +226,12 @@ class BrowserSessionManager {
     };
   }
 
-  async release(sessionId) {
+  async release(sessionId: string): Promise<void> {
     this.userTakeoverMode = false;
     await this.exec(sessionId, "release", {});
   }
 
-  async exec(sessionId, action, params) {
+  async exec(sessionId: string, action: string, params: any): Promise<any> {
     const response = await fetch(
       `${this.agentUrl}/session/${sessionId}/${action}`,
       {
@@ -178,18 +240,37 @@ class BrowserSessionManager {
         body: JSON.stringify(params),
       },
     );
+    if (!response.ok) {
+      throw new Error(`Browser agent request failed: ${response.statusText}`);
+    }
     return response.json();
   }
 }
 
 // === LLM Router (Multi-provider with fallback) ===
+interface LLMResponse {
+  text: string;
+  provider: string;
+  model: string;
+}
+
+interface LLMOptions {
+  model?: string;
+  maxTokens?: number;
+  temperature?: number;
+  timeout?: number;
+}
+
 class LLMRouter {
-  constructor(workerUrl, fallbacks) {
+  private primary: string;
+  private fallbacks: (string | null)[];
+
+  constructor(workerUrl: string, fallbacks: (string | null)[]) {
     this.primary = workerUrl;
     this.fallbacks = fallbacks.filter((f) => f !== workerUrl);
   }
 
-  async invoke(messages, options = {}) {
+  async invoke(messages: any[], options: LLMOptions = {}): Promise<LLMResponse> {
     const providers = [this.primary, ...this.fallbacks];
 
     for (const url of providers) {
@@ -215,7 +296,7 @@ class LLMRouter {
             model: data.model_used || "unknown",
           };
         }
-      } catch (e) {
+      } catch (e: any) {
         console.warn(`Provider ${url} failed:`, e.message);
       }
     }
@@ -224,12 +305,20 @@ class LLMRouter {
 }
 
 // === Media Generation ===
+interface MediaResult {
+  url: string;
+  provider: string;
+  prompt: string;
+}
+
 class MediaGenerator {
-  constructor(endpoints) {
+  private endpoints: AgentConfig["mediaEndpoints"];
+
+  constructor(endpoints: AgentConfig["mediaEndpoints"]) {
     this.endpoints = endpoints;
   }
 
-  async generateImage(prompt, options = {}) {
+  async generateImage(prompt: string, options: any = {}): Promise<MediaResult> {
     for (const endpoint of this.endpoints.image) {
       try {
         const response = await fetch(`${endpoint}/generate/image`, {
@@ -252,7 +341,7 @@ class MediaGenerator {
     throw new Error("All image providers failed");
   }
 
-  async generateVideo(prompt, options = {}) {
+  async generateVideo(prompt: string, options: any = {}): Promise<any> {
     for (const endpoint of this.endpoints.video) {
       try {
         const response = await fetch(`${endpoint}/generate/video`, {
@@ -268,7 +357,7 @@ class MediaGenerator {
     throw new Error("All video providers failed");
   }
 
-  async generateAudio(prompt, options = {}) {
+  async generateAudio(prompt: string, options: any = {}): Promise<any> {
     for (const endpoint of this.endpoints.audio) {
       try {
         const response = await fetch(`${endpoint}/generate/audio`, {
@@ -287,13 +376,17 @@ class MediaGenerator {
 
 // === Cloudflare Pages Deployer ===
 class CloudflareDeployer {
-  constructor(apiToken, accountId, projectName) {
+  private apiToken: string;
+  private accountId: string;
+  private projectName: string;
+
+  constructor(apiToken: string, accountId: string, projectName: string) {
     this.apiToken = apiToken;
     this.accountId = accountId;
     this.projectName = projectName;
   }
 
-  async deploy(files) {
+  async deploy(files: Record<string, string>): Promise<any> {
     const formData = new FormData();
     formData.append("project", this.projectName);
     for (const [path, content] of Object.entries(files)) {
@@ -308,13 +401,40 @@ class CloudflareDeployer {
         body: formData,
       },
     );
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`Cloudflare deploy failed: ${errorData.errors?.[0]?.message || response.statusText}`);
+    }
     return response.json();
   }
 }
 
 // === Main Agent Class ===
+interface AgentThinkResult {
+  response: string;
+  toolResults: any[];
+  model: string;
+  provider: string;
+  error?: string;
+}
+
+interface ToolCall {
+  tool: string;
+  args: any;
+}
+
 class UnifiedAgent {
-  constructor(customConfig = {}) {
+  public config: AgentConfig;
+  public memory: MemorySystem;
+  public browser: BrowserSessionManager;
+  public llm: LLMRouter;
+  public media: MediaGenerator;
+  public cloudflare: CloudflareDeployer | null;
+  public tools: Map<string, Tool>;
+  public isThinking: boolean = false;
+  public identity: string = "an autonomous agent";
+
+  constructor(customConfig: Partial<AgentConfig> = {}) {
     this.config = { ...config, ...customConfig };
     this.memory = new MemorySystem();
     this.browser = new BrowserSessionManager(this.config.browserAgent);
@@ -328,14 +448,13 @@ class UnifiedAgent {
         )
       : null;
     this.tools = new Map();
-    this.isThinking = false;
   }
 
-  registerTool(tool) {
+  registerTool(tool: Tool) {
     this.tools.set(tool.name, tool);
   }
 
-  async think(userMessage, context = {}) {
+  async think(userMessage: string, context: any = {}): Promise<AgentThinkResult> {
     this.isThinking = true;
     try {
       this.memory.add("user", userMessage, context);
@@ -344,7 +463,7 @@ class UnifiedAgent {
 
       const messages = [
         { role: "system", content: systemPrompt },
-        ...this.memory.episodic
+        ...this.memory.getEpisodic()
           .slice(-10)
           .map((m) => ({ role: m.role, content: m.content })),
         { role: "user", content: userMessage },
@@ -352,16 +471,20 @@ class UnifiedAgent {
 
       const llmResponse = await this.llm.invoke(messages);
       const toolCalls = this.parseToolCalls(llmResponse.text);
-      const toolResults = [];
+      const toolResults: any[] = [];
 
       for (const call of toolCalls) {
         const tool = this.tools.get(call.tool);
         if (tool) {
-          const result = await tool.execute(call.args, {
-            agent: this,
-            context,
-          });
-          toolResults.push({ tool: call.tool, result });
+          try {
+            const result = await tool.execute(call.args, {
+              agent: this,
+              context,
+            });
+            toolResults.push({ tool: call.tool, result });
+          } catch (e: any) {
+            toolResults.push({ tool: call.tool, error: e.message });
+          }
         }
       }
 
@@ -382,13 +505,13 @@ class UnifiedAgent {
         model: llmResponse.model,
         provider: llmResponse.provider,
       };
-    } catch (error) {
+    } catch (error: any) {
       this.isThinking = false;
-      return { response: `Error: ${error.message}`, error: error.message };
+      return { response: `Error: ${error.message}`, toolResults: [], model: "unknown", provider: "unknown", error: error.message };
     }
   }
 
-  buildSystemPrompt(memories) {
+  buildSystemPrompt(memories: MemoryEntry[]) {
     const toolsList = Array.from(this.tools.values())
       .map((t) => `- ${t.name}: ${t.description} (${t.permission})`)
       .join("\n");
@@ -397,7 +520,7 @@ class UnifiedAgent {
       .map((m) => `[${m.role}]: ${m.content.slice(0, 100)}`)
       .join("\n");
 
-    return `You are ${this.identity || "an autonomous agent"} with these capabilities:
+    return `You are ${this.identity} with these capabilities:
 
 ## Available Tools
 ${toolsList}
@@ -422,8 +545,8 @@ When you need to use a tool, output:
 Proceed.`;
   }
 
-  parseToolCalls(text) {
-    const calls = [];
+  parseToolCalls(text: string): ToolCall[] {
+    const calls: ToolCall[] = [];
     const regex = /<tool_call>\s*(\{[\s\S]*?\})\s*<\/tool_call>/g;
     let match;
     while ((match = regex.exec(text)) !== null) {
@@ -435,7 +558,7 @@ Proceed.`;
     return calls;
   }
 
-  async synthesize(originalQuery, llmResponse, toolResults) {
+  async synthesize(originalQuery: string, llmResponse: string, toolResults: any[]): Promise<string> {
     const synthesisPrompt = `Original: ${originalQuery}
 
 Initial response: ${llmResponse}
@@ -461,3 +584,4 @@ export {
   MediaGenerator,
   CloudflareDeployer,
 };
+export type { AgentThinkResult };
