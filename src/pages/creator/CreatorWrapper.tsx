@@ -123,22 +123,6 @@ export default function CreatorWrapper() {
             );
           })}
         </div>
-
-        {/* Stats Summary */}
-        <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: "Drafts", value: "12", icon: FileText, color: "text-blue-400" },
-            { label: "Published", value: "47", icon: Share2, color: "text-emerald-400" },
-            { label: "Scheduled", value: "8", icon: Calendar, color: "text-amber-400" },
-            { label: "Views (30d)", value: "23.4K", icon: TrendingUp, color: "text-purple-400" },
-          ].map((stat, i) => (
-            <div key={i} className="glass rounded-xl border border-white/5 p-4 text-center">
-              <stat.icon className={`w-6 h-6 mx-auto mb-2 ${stat.color}`} />
-              <div className="text-2xl font-bold text-white">{stat.value}</div>
-              <div className="text-white/50 text-sm">{stat.label}</div>
-            </div>
-          ))}
-        </div>
       </div>
     </PanelLayout>
   );

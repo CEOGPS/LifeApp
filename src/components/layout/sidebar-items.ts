@@ -39,9 +39,7 @@ export const SIDEBAR_SECTIONS: SidebarSection[] = [
     items: [
       { id: "creator", label: "CreatorOS1", icon: "Wand2", href: "/creator" },
       { id: "veriton", label: "Veriton", icon: "Music", href: "/veriton" },
-      { id: "community", label: "Community", icon: "Globe", href: "/community" },
       { id: "social", label: "SocialLinkOS1", icon: "Share2", href: "/social" },
-      { id: "marketing", label: "Marketing", icon: "Megaphone", href: "/marketing" },
     ],
   },
   {
@@ -50,8 +48,6 @@ export const SIDEBAR_SECTIONS: SidebarSection[] = [
     items: [
       { id: "ai-dock", label: "Agent Dock", icon: "Bot", href: "/ai-dock" },
       { id: "agents", label: "AgentZero", icon: "Network", href: "/agents" },
-      { id: "opportunity", label: "Opportunity Engine", icon: "Zap", href: "/opportunity" },
-      { id: "insights", label: "Insight Engine", icon: "Brain", href: "/insights" },
       { id: "omni", label: "OmniSearch", icon: "Search", href: "/omni" },
     ],
   },
@@ -59,11 +55,9 @@ export const SIDEBAR_SECTIONS: SidebarSection[] = [
     id: "command",
     label: "COMMAND",
     items: [
-      { id: "business", label: "Business Command", icon: "BarChart3", href: "/business" },
       { id: "projects", label: "Projects", icon: "FolderKanban", href: "/projects" },
       { id: "calendar", label: "Calendar", icon: "Calendar", href: "/calendar" },
       { id: "office", label: "Office", icon: "FileSpreadsheet", href: "/office" },
-      { id: "maps", label: "Maps", icon: "MapPin", href: "/maps" },
     ],
   },
   {
@@ -72,10 +66,7 @@ export const SIDEBAR_SECTIONS: SidebarSection[] = [
     collapsible: true,
     defaultOpen: true,
     items: [
-      { id: "family", label: "Family & Friends", icon: "Heart", href: "/family" },
-      { id: "health", label: "Health", icon: "Activity", href: "/health" },
       { id: "journal", label: "Journal", icon: "BookOpen", href: "/journal" },
-      { id: "pulse", label: "Life Audit", icon: "Activity", href: "/pulse" },
       { id: "simulators", label: "Simulators", icon: "GitBranch", href: "/simulators" },
     ],
   },
@@ -88,7 +79,6 @@ export const SIDEBAR_SECTIONS: SidebarSection[] = [
       { id: "media", label: "Media", icon: "Image", href: "/media" },
       { id: "vault", label: "Secure Vault", icon: "Lock", href: "/vault" },
       { id: "legal", label: "Legal", icon: "Scale", href: "/legal" },
-      { id: "terminals", label: "Terminals", icon: "Terminal", href: "/terminal" },
     ],
   },
   {
@@ -98,7 +88,7 @@ export const SIDEBAR_SECTIONS: SidebarSection[] = [
     defaultOpen: false,
     items: [
       { id: "integrations", label: "Integrations", icon: "Plug", href: "/integrations" },
-      { id: "preferences", label: "Settings", icon: "Settings", href: "/preferences" },
+      { id: "marketing", label: "Marketing", icon: "Megaphone", href: "/marketing" },
     ],
   },
 ];

@@ -28,55 +28,9 @@ const VaultPage = lazy(() => import("./pages/vault/VaultPanel").then(m => ({ def
 const SimulatorsPage = lazy(() => import("./pages/simulators/AlternateLifeExplorer").then(m => ({ default: m.default })));
 const AIDockPage = lazy(() => import("./components/ErebusDock").then(m => ({ default: m.ErebusDock })));
 const AIHubPage = lazy(() => import("./pages/aihub/AIHubPage"));
-
-function Soon({ title, detail }: { title: string; detail: string }) {
-  return (
-    <div className="p-8">
-      <h1 className="text-lg tracking-[0.14em] text-white">{title}</h1>
-      <p className="mt-2 max-w-xl text-sm text-white/50">{detail}</p>
-    </div>
-  );
-}
-
-const CalendarPage = () => (
-  <Soon title="CALENDAR" detail="Scheduling, invites, and Calendly sit here. Not wired yet." />
-);
-const FinancePage = () => (
-  <Soon title="FINANCE" detail="Balances, bills, credit, and the Stripe portal sit here. Not wired yet." />
-);
-const MarketingPage = () => (
-  <Soon title="MARKETING" detail="SEO, listings, keyword tracking, and lead sources sit here. Not wired yet." />
-);
-const TerminalPage = () => (
-  <Soon title="TERMINALS" detail="PowerShell, WSL, Ubuntu, Python, and a code locker sit here. Not wired yet." />
-);
-const PreferencesPage = () => (
-  <Soon title="SETTINGS" detail="Granular dashboard and agent controls, plus full export. Not wired yet." />
-);
-const CommunityPage = () => (
-  <Soon title="COMMUNITY" detail="Local groups scanned for consented leads and opportunities. Not wired yet." />
-);
-const OpportunityPage = () => (
-  <Soon title="OPPORTUNITY ENGINE" detail="Warm leads from people you already know. Not wired yet." />
-);
-const InsightsPage = () => (
-  <Soon title="INSIGHT ENGINE" detail="Cross-domain patterns and life hacks. Not wired yet." />
-);
-const BusinessPage = () => (
-  <Soon title="BUSINESS COMMAND" detail="CEO GPS analytics, listings, and a URL lookup. Not wired yet." />
-);
-const MapsPage = () => (
-  <Soon title="MAPS" detail="Saved areas, locations, and routes. Not wired yet." />
-);
-const FamilyPage = () => (
-  <Soon title="FAMILY & FRIENDS" detail="Deeper profiles: favorites, milestones, likes, and dislikes. Not wired yet." />
-);
-const HealthPage = () => (
-  <Soon title="HEALTH" detail="Monitoring and workout goals. Not wired yet." />
-);
-const PulsePage = () => (
-  <Soon title="LIFE AUDIT" detail="A weekly pulse across calendar, money, family, and spending. Not wired yet." />
-);
+const CalendarPage = lazy(() => import("./pages/dashboard/_components/CalendarModule").then(m => ({ default: m.default })));
+const FinancePage = lazy(() => import("./pages/finance/FinancePanel").then(m => ({ default: m.default })));
+const MarketingPage = lazy(() => import("./pages/dashboard/_components/MarketingAnalytics").then(m => ({ default: m.default })));
 
 export function AppRoutes() {
   return (
@@ -112,7 +66,7 @@ export function AppRoutes() {
           <Route path="/notes" element={<NotesPage />} />
           <Route path="/leads" element={<Navigate to="/crm" replace />} />
           <Route path="/finance" element={<FinancePage />} />
-          <Route path="/analytics" element={<Navigate to="/business" replace />} />
+          <Route path="/analytics" element={<Navigate to="/marketing" replace />} />
           <Route path="/marketing" element={<MarketingPage />} />
           <Route path="/social" element={<SocialPage />} />
           <Route path="/veriton/*" element={<VeritonWrapper />} />
@@ -120,20 +74,10 @@ export function AppRoutes() {
           <Route path="/omni" element={<OmniSearchWrapper />} />
           <Route path="/creator" element={<CreatorWrapper />} />
           <Route path="/browser" element={<Navigate to="/omni" replace />} />
-          <Route path="/terminal" element={<TerminalPage />} />
           <Route path="/simulators" element={<SimulatorsPage />} />
           <Route path="/vault" element={<VaultPage />} />
           <Route path="/integrations" element={<IntegrationsPage />} />
           <Route path="/agents" element={<AIHubPage />} />
-          <Route path="/preferences" element={<PreferencesPage />} />
-          <Route path="/community" element={<CommunityPage />} />
-          <Route path="/opportunity" element={<OpportunityPage />} />
-          <Route path="/insights" element={<InsightsPage />} />
-          <Route path="/business" element={<BusinessPage />} />
-          <Route path="/maps" element={<MapsPage />} />
-          <Route path="/family" element={<FamilyPage />} />
-          <Route path="/health" element={<HealthPage />} />
-          <Route path="/pulse" element={<PulsePage />} />
           <Route path="/crm" element={<CRMPage />} />
           <Route path="/journal" element={<JournalPage />} />
           <Route path="/communications" element={<CommunicationsPage />} />
