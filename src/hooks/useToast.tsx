@@ -40,10 +40,19 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+export function toast(props: Omit<Toast, "id">): string {
+  void props;
+  return "";
+}
+
 export function useToast() {
   const context = useContext(ToastContext);
   if (!context) {
-    throw new Error("useToast must be used within a ToastProvider");
+    return {
+      toasts: [] as Toast[],
+      toast: (_props: Omit<Toast, "id">) => "",
+      dismiss: (_id: string) => {},
+    };
   }
   return context;
 }
